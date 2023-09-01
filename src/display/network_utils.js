@@ -32,8 +32,10 @@ function validateRangeRequestCapabilities({
     allowRangeRequests: false,
     suggestedLength: undefined,
   };
-
-  const length = parseInt(getResponseHeader("Content-Length"), 10);
+  
+  const contentRange = getResponseHeader("Content-Range");
+  const length = parseInt(contentRange.substring(contentRange.indexOf('/') + 1)); 
+  //const length = parseInt(getResponseHeader("Content-Length"), 10);
   if (!Number.isInteger(length)) {
     return returnValues;
   }

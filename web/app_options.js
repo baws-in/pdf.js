@@ -168,7 +168,7 @@ const defaultOptions = {
   },
   textLayerMode: {
     /** @type {number} */
-    value: 1,
+    value: 2,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
   },
   useOnlyCssZoom: {
@@ -385,6 +385,29 @@ class AppOptions {
    */
   static _hasUserOptions() {
     return Object.keys(userOptions).length > 0;
+  }
+
+
+  //customization started
+  static getProperyByScreenSize(name) {
+  
+    if(screen.width > 1300){
+      switch(name){
+        case "scrollModeOnLoad":
+         return 3
+         case "spreadModeOnLoad":
+          return 0 
+      }
+    }else{
+      switch(name){
+        case "scrollModeOnLoad":
+         return 3
+         case "spreadModeOnLoad":
+          return 0
+      }
+    }
+
+    return undefined;
   }
 }
 

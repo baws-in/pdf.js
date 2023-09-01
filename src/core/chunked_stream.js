@@ -425,6 +425,7 @@ class ChunkedStreamManager {
     const groupedChunks = [];
     let beginChunk = -1;
     let prevChunk = -1;
+    let group_skip  = true;
 
     for (let i = 0, ii = chunks.length; i < ii; ++i) {
       const chunk = chunks[i];
@@ -432,7 +433,7 @@ class ChunkedStreamManager {
         beginChunk = chunk;
       }
 
-      if (prevChunk >= 0 && prevChunk + 1 !== chunk) {
+      if (prevChunk >= 0 && (prevChunk + 1 !== chunk || group_skip)) {
         groupedChunks.push({ beginChunk, endChunk: prevChunk + 1 });
         beginChunk = chunk;
       }

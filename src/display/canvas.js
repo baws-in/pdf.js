@@ -1983,7 +1983,7 @@ class CanvasGraphics {
       ) {
         this._cachedGetSinglePixelWidth = null;
         lineWidth = this.getSinglePixelWidth();
-        resetLineWidthToOne = lineWidth < 0;
+        resetLineWidthToOne = lineWidth < 1;
       }
     } else {
       lineWidth /= scale;

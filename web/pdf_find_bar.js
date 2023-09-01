@@ -83,13 +83,16 @@ class PDFFindBar {
     });
 
     this.eventBus._on("resize", this._adjustWidth.bind(this));
+    this.eventBus._on("pagechanging", evt => {
+      this.dispatchEvent("");
+    });
   }
 
   reset() {
     this.updateUIState();
   }
 
-  dispatchEvent(type, findPrev) {
+  dispatchEvent(type, findPrev = false) {
     this.eventBus.dispatch("find", {
       source: this,
       type,

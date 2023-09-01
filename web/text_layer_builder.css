@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/*
 .textLayer {
   position: absolute;
   text-align: initial;
@@ -25,14 +25,14 @@
   line-height: 1;
 }
 
-.textLayer span,
+ .textLayer span,
 .textLayer br {
   color: transparent;
   position: absolute;
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
-}
+} */
 
 .textLayer .highlight {
   margin: -1px;

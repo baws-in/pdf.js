@@ -24,7 +24,7 @@ const FindState = {
   PENDING: 3,
 };
 
-const FIND_TIMEOUT = 250; // ms
+const FIND_TIMEOUT = 1000; // ms
 const MATCH_SCROLL_OFFSET_TOP = -50; // px
 const MATCH_SCROLL_OFFSET_LEFT = -400; // px
 
@@ -104,7 +104,22 @@ class PDFFindController {
     this._eventBus = eventBus;
 
     this._reset();
+    eventBus._on("find", this._onFind.bind(this));
     eventBus._on("findbarclose", this._onFindBarClose.bind(this));
+
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+      this.executeCommand = (cmd, state) => {
+        console.error(
+          "Deprecated method `PDFFindController.executeCommand` called, " +
+          'please dispatch a "find"-event using the EventBus instead.'
+        );
+
+        const eventState = Object.assign(Object.create(null), state, {
+          type: cmd.substring("find".length),
+        });
+        this._onFind(eventState);
+      };
+    }
   }
 
   get highlightMatches() {
@@ -144,17 +159,21 @@ class PDFFindController {
     this._firstPageCapability.resolve();
   }
 
-  executeCommand(cmd, state) {
+  /**
+   * @private
+   */
+  _onFind(state) {
     if (!state) {
       return;
     }
     const pdfDocument = this._pdfDocument;
+    const { type } = state;
 
-    if (this._state === null || this._shouldDirtyMatch(cmd, state)) {
+    if (this._state === null || this._shouldDirtyMatch(state)) {
       this._dirtyMatch = true;
     }
     this._state = state;
-    if (cmd !== "findhighlightallchange") {
+    if (type !== "highlightallchange") {
       this._updateUIState(FindState.PENDING);
     }
 
@@ -176,7 +195,7 @@ class PDFFindController {
         clearTimeout(this._findTimeout);
         this._findTimeout = null;
       }
-      if (cmd === "find") {
+      if (!type) {
         // Trigger the find action with a small delay to avoid starting the
         // search when the user is still typing (saving resources).
         this._findTimeout = setTimeout(() => {
@@ -187,7 +206,7 @@ class PDFFindController {
         // Immediately trigger searching for non-'find' operations, when the
         // current state needs to be reset and matches re-calculated.
         this._nextMatch();
-      } else if (cmd === "findagain") {
+      } else if (type === "again") {
         this._nextMatch();
 
         // When the findbar was previously closed, and `highlightAll` is set,
@@ -195,7 +214,7 @@ class PDFFindController {
         if (findbarClosed && this._state.highlightAll) {
           this._updateAllPages();
         }
-      } else if (cmd === "findhighlightallchange") {
+      } else if (type === "highlightallchange") {
         // If there was a pending search operation, synchronously trigger a new
         // search *first* to ensure that the correct matches are highlighted.
         if (pendingTimeout) {
@@ -275,14 +294,14 @@ class PDFFindController {
     return this._normalizedQuery;
   }
 
-  _shouldDirtyMatch(cmd, state) {
+  _shouldDirtyMatch(state) {
     // When the search query changes, regardless of the actual search command
     // used, always re-calculate matches to avoid errors (fixes bug 1030622).
     if (state.query !== this._state.query) {
       return true;
     }
-    switch (cmd) {
-      case "findagain":
+    switch (state.type) {
+      case "again":
         const pageNumber = this._selected.pageIdx + 1;
         const linkService = this._linkService;
         // Only treat a 'findagain' event as a new search operation when it's
@@ -302,7 +321,7 @@ class PDFFindController {
           return true;
         }
         return false;
-      case "findhighlightallchange":
+      case "highlightallchange":
         return false;
     }
     return true;
@@ -514,13 +533,14 @@ class PDFFindController {
   }
 
   _extractText() {
+    const currentPageIndex = this._linkService.page - 1;
+
     // Perform text extraction once if this method is called multiple times.
-    if (this._extractTextPromises.length > 0) {
-      return;
-    }
+
 
     let promise = Promise.resolve();
-    for (let i = 0, ii = this._linkService.pagesCount; i < ii; i++) {
+    //it was linkService.pagesCount, to load some pages updated as 4, by RK
+    for (let i = currentPageIndex-2, ii = currentPageIndex+2; i < ii; i++) {
       const extractTextCapability = createPromiseCapability();
       this._extractTextPromises[i] = extractTextCapability.promise;
 
@@ -604,7 +624,7 @@ class PDFFindController {
 
       this._updateAllPages(); // Wipe out any previously highlighted matches.
 
-      for (let i = 0; i < numPages; i++) {
+      for (let i = currentPageIndex-2; i < currentPageIndex+2; i++) {
         // Start finding the matches as soon as the text is extracted.
         if (this._pendingFindMatches.has(i)) {
           continue;
@@ -698,6 +718,7 @@ class PDFFindController {
   }
 
   _advanceOffsetPage(previous) {
+    const currentPageIndex = this._linkService.page - 1;
     const offset = this._offset;
     const numPages = this._linkService.pagesCount;
     offset.pageIdx = previous ? offset.pageIdx - 1 : offset.pageIdx + 1;
@@ -705,7 +726,7 @@ class PDFFindController {
 
     this._pagesToSearch--;
 
-    if (offset.pageIdx >= numPages || offset.pageIdx < 0) {
+    if (offset.pageIdx > currentPageIndex || offset.pageIdx < currentPageIndex) {
       offset.pageIdx = previous ? numPages - 1 : 0;
       offset.wrapped = true;
     }
@@ -797,7 +818,7 @@ class PDFFindController {
     });
   }
 
-  _updateUIState(state, previous) {
+  _updateUIState(state, previous = false) {
     this._eventBus.dispatch("updatefindcontrolstate", {
       source: this,
       state,

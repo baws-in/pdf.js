@@ -39,6 +39,7 @@ function createFetchOptions(headers, withCredentials, abortController) {
     mode: "cors",
     credentials: withCredentials ? "include" : "same-origin",
     redirect: "follow",
+    cache:"force-cache",
   };
 }
 
@@ -121,6 +122,7 @@ class PDFFetchStreamReader {
     this._isRangeSupported = !source.disableRange;
 
     this._headers = createHeaders(this._stream.httpHeaders);
+    this._headers.append("Range", `bytes=0-65535`);
 
     const url = source.url;
     fetch(
@@ -158,7 +160,8 @@ class PDFFetchStreamReader {
         // We need to stop reading when range is supported and streaming is
         // disabled.
         if (!this._isStreamingSupported && this._isRangeSupported) {
-          this.cancel(new AbortException("Streaming is disabled."));
+          //this.cancel(new AbortException("Streaming is disabled."));
+          console.log("not cancelling the first request");  
         }
       })
       .catch(this._headersCapability.reject);
@@ -232,26 +235,59 @@ class PDFFetchStreamRangeReader {
     this._headers.append("Range", `bytes=${begin}-${end - 1}`);
 
     const url = source.url;
-    fetch(
-      url,
-      createFetchOptions(
-        this._headers,
-        this._withCredentials,
-        this._abortController
-      )
-    )
-      .then(response => {
-        if (!validateResponseStatus(response.status)) {
-          throw createResponseStatusError(response.status, url);
+    const cache_url = url+`?bytes=${begin}-${end - 1}`;
+    this._request = new Request(
+	    url,
+            createFetchOptions(
+            this._headers,
+            this._withCredentials,
+            this._abortController
+          )
+        );
+    
+
+    caches.open('chunkCache')
+    .then(cache=>{
+      this._chunkCache = cache;
+      return cache.match(cache_url,{ignoreVary: true});
+    }).then(resp=>{
+      if(resp) {
+        if (resp.ok){
+          this._readCapability.resolve();
+          this._reader = resp.body.getReader();
         }
-        this._readCapability.resolve();
-        this._reader = response.body.getReader();
-      })
-      .catch(this._readCapability.reject);
 
-    this.onProgress = null;
+        this.onProgress = null;
+        return;
+      } 
+
+      fetch(
+        url,
+        createFetchOptions(
+          this._headers,
+          this._withCredentials,
+          this._abortController
+          )
+        ) 
+        .then(response => {
+          if (!validateResponseStatus(response.status)) {
+            throw createResponseStatusError(response.status, url);
+          }
+          this._readCapability.resolve();
+	  let new_response = new Response(response.clone().body, {
+		      status: 200,
+		      statusText: "OK",
+		      headers: response.headers,
+		    })
+
+          this._chunkCache.put(cache_url, new_response);
+          this._reader = response.body.getReader();
+        })
+        .catch(this._readCapability.reject);
+
+      this.onProgress = null;
+    });
   }
-
   get isStreamingSupported() {
     return this._isStreamingSupported;
   }

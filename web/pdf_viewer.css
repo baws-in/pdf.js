@@ -36,11 +36,9 @@
 .pdfViewer {
   padding-bottom: var(--pdfViewer-padding-bottom);
 }
-
-.pdfViewer .canvasWrapper {
+/* .pdfViewer .canvasWrapper {
   overflow: hidden;
-}
-
+} */
 .pdfViewer .page {
   direction: ltr;
   width: 816px;

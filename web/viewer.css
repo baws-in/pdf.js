@@ -94,6 +94,7 @@
   --secondaryToolbarButton-rotateCw-icon: url(images/secondaryToolbarButton-rotateCw.svg);
   --secondaryToolbarButton-selectTool-icon: url(images/secondaryToolbarButton-selectTool.svg);
   --secondaryToolbarButton-handTool-icon: url(images/secondaryToolbarButton-handTool.svg);
+  --secondaryToolbarButton-scrollPage-icon: url(images/secondaryToolbarButton-scrollPage.svg);
   --secondaryToolbarButton-scrollVertical-icon: url(images/secondaryToolbarButton-scrollVertical.svg);
   --secondaryToolbarButton-scrollHorizontal-icon: url(images/secondaryToolbarButton-scrollHorizontal.svg);
   --secondaryToolbarButton-scrollWrapped-icon: url(images/secondaryToolbarButton-scrollWrapped.svg);
@@ -314,9 +315,11 @@ html[dir="rtl"] #sidebarContent {
   bottom: 0;
   left: 0;
   outline: none;
+  transition-property: transform;
+  transition-duration: 200ms;
 }
 #viewerContainer:not(.pdfPresentationMode) {
-  transition-duration: var(--sidebar-transition-duration);
+  
   transition-timing-function: var(--sidebar-transition-timing-function);
 }
 
@@ -325,15 +328,11 @@ html[dir="rtl"] #sidebarContent {
   transition-duration: 0s;
 }
 
-html[dir="ltr"]
-  #outerContainer.sidebarOpen
-  #viewerContainer:not(.pdfPresentationMode) {
+html[dir="ltr"] #outerContainer.sidebarOpen #viewerContainer:not(.pdfPresentationMode) {
   transition-property: left;
   left: var(--sidebar-width);
 }
-html[dir="rtl"]
-  #outerContainer.sidebarOpen
-  #viewerContainer:not(.pdfPresentationMode) {
+html[dir="rtl"] #outerContainer.sidebarOpen #viewerContainer:not(.pdfPresentationMode) {
   transition-property: right;
   right: var(--sidebar-width);
 }
@@ -356,12 +355,10 @@ html[dir="rtl"]
   background-color: var(--sidebar-toolbar-bg-color);
 }
 html[dir="ltr"] #toolbarSidebar {
-  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.25), 0 1px 0 rgba(0, 0, 0, 0.15),
-    0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.25), 0 1px 0 rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
 }
 html[dir="rtl"] #toolbarSidebar {
-  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.25), 0 1px 0 rgba(0, 0, 0, 0.15),
-    0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.25), 0 1px 0 rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 html[dir="ltr"] #toolbarSidebar .toolbarButton {
@@ -633,8 +630,7 @@ html[dir="rtl"] .secondaryToolbar {
 .doorHanger,
 .doorHangerRight {
   border-radius: 2px;
-  box-shadow: 0 1px 5px var(--doorhanger-border-color),
-    0 0 0 1px var(--doorhanger-border-color);
+  box-shadow: 0 1px 5px var(--doorhanger-border-color), 0 0 0 1px var(--doorhanger-border-color);
   border: var(--doorhanger-border-color-whcm);
 }
 .doorHanger:after,
@@ -909,9 +905,7 @@ html[dir="rtl"] .dropdownToolbarButton::after {
 }
 
 .dropdownToolbarButton > select {
-  width: calc(
-    var(--scale-select-container-width) + var(--scale-select-overflow)
-  );
+  width: calc(var(--scale-select-container-width) + var(--scale-select-overflow));
   height: 28px;
   font-size: 12px;
   color: var(--main-color);
@@ -1194,6 +1188,11 @@ html[dir="rtl"] .secondaryToolbarButton > span {
 .secondaryToolbarButton.handTool::before {
   -webkit-mask-image: var(--secondaryToolbarButton-handTool-icon);
   mask-image: var(--secondaryToolbarButton-handTool-icon);
+}
+
+.secondaryToolbarButton.scrollPage::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-scrollPage-icon);
+  mask-image: var(--secondaryToolbarButton-scrollPage-icon);
 }
 
 .secondaryToolbarButton.scrollVertical::before {
@@ -1749,8 +1748,7 @@ html[dir="rtl"] #documentPropertiesOverlay .row > * {
   cursor: url("images/grab.cur"), move !important;
   cursor: grab !important;
 }
-.grab-to-pan-grab
-  *:not(input):not(textarea):not(button):not(select):not(:link) {
+.grab-to-pan-grab *:not(input):not(textarea):not(button):not(select):not(:link) {
   cursor: inherit !important;
 }
 .grab-to-pan-grab:active,
@@ -1950,3 +1948,96 @@ html[dir="rtl"] #documentPropertiesOverlay .row > * {
     display: none;
   }
 }
+
+.vertical-alignment-helper {
+  display: table;
+  height: 100%;
+  width: 30%;
+}
+.vertical-align-center {
+  display: table-cell;
+  vertical-align: middle;
+  left: 99%;
+  text-align: center;
+}
+
+.page_prev_icon{
+  z-index: 11;
+  position: fixed;
+    top: 50%;
+    left: 4%;
+    transform: translate(-50%,-50%);
+    font-size: 3em; 
+    color: var(--bs-red);
+}
+.page_next_icon{
+  z-index: 12;
+  position: fixed;
+    top: 50%;
+    right: 2%;
+    transform: translate(-50%,-50%);
+    font-size: 3em; 
+    color: var(--bs-red);
+}
+
+/*@media screen and (max-width: 1300px) {
+  .pdfViewer .canvasWrapper {
+    display: none;
+  }
+  .textLayer {
+    position: absolute;
+    text-align: initial;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    opacity: 1;
+    line-height: 1;
+  }
+  .textLayer span,
+.textLayer br {
+  color: black;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+}
+
+@media screen and (min-width: 1305px) {
+  */
+  .pdfViewer .canvasWrapper {
+    overflow: hidden;
+  }
+  .textLayer {
+    position: absolute;
+    text-align: initial;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    opacity: 0.2;
+    line-height: 1;
+  }
+  .textLayer span,
+.textLayer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+/*} */
+
+
+@keyframes blinker {
+  50% {
+    opacity: 0;
+  }
+}
+
+
+
+

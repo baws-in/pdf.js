@@ -841,6 +841,12 @@ function buildGeneric(defines, dir) {
     gulp
       .src("web/compressed.tracemonkey-pldi-09.pdf")
       .pipe(gulp.dest(dir + "web")),
+      gulp
+      .src("web/page-flip-sound.mp3")
+      .pipe(gulp.dest(dir + "web")),
+      gulp
+      .src("web/viewer-flexi.js")
+      .pipe(gulp.dest(dir + "web")),
   ]);
 }
 
@@ -1007,6 +1013,12 @@ function buildMinified(defines, dir) {
     gulp
       .src("web/compressed.tracemonkey-pldi-09.pdf")
       .pipe(gulp.dest(dir + "web")),
+      gulp
+      .src("web/page-flip-sound.mp3")
+      .pipe(gulp.dest(dir + "web")),
+      gulp
+      .src("web/viewer-flexi.js")
+      .pipe(gulp.dest(dir + "web")),
   ]);
 }
 
@@ -1024,6 +1036,7 @@ async function parseMinified(dir) {
   const viewerFiles = {
     "pdf.js": pdfFile,
     "viewer.js": fs.readFileSync(dir + "/web/viewer.js").toString(),
+    "viewer-flexi.js": fs.readFileSync(dir + "/web/viewer-flexi.js").toString(),
   };
 
   console.log();
@@ -1041,6 +1054,10 @@ async function parseMinified(dir) {
 
   fs.writeFileSync(
     dir + "/web/pdf.viewer.js",
+    (await Terser.minify(viewerFiles, options)).code
+  );
+  fs.writeFileSync(
+    dir + "/web/pdf.viewer-flexi.js",
     (await Terser.minify(viewerFiles, options)).code
   );
   fs.writeFileSync(
@@ -1064,6 +1081,7 @@ async function parseMinified(dir) {
   console.log("### Cleaning js files");
 
   fs.unlinkSync(dir + "/web/viewer.js");
+  fs.unlinkSync(dir + "/web/viewer-flexi.js");
   fs.unlinkSync(dir + "/web/debugger.js");
   fs.unlinkSync(dir + "/build/pdf.js");
   fs.unlinkSync(dir + "/build/pdf.worker.js");

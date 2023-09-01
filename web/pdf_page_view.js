@@ -770,7 +770,7 @@ class PDFPageView {
       canvas.mozOpaque = true;
     }
 
-    const ctx = canvas.getContext("2d", { alpha: false });
+    const ctx = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
     const outputScale = getOutputScale(ctx);
     this.outputScale = outputScale;
 
@@ -831,7 +831,7 @@ class PDFPageView {
     renderTask.promise.then(
       function () {
         showCanvas();
-        renderCapability.resolve(undefined);
+        renderCapability.resolve();
       },
       function (error) {
         showCanvas();
