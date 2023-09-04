@@ -66,7 +66,6 @@ const pdfViewer = new pdfjsViewer.PDFViewer({
   linkService: pdfLinkService,
   findController: pdfFindController,
   scriptingManager: pdfScriptingManager,
-  enableScripting: true, // Only necessary in PDF.js version 2.10.377 and below.
 });
 pdfLinkService.setViewer(pdfViewer);
 pdfScriptingManager.setViewer(pdfViewer);
@@ -77,7 +76,7 @@ eventBus.on("pagesinit", function () {
 
   // We can try searching for things.
   if (SEARCH_FOR) {
-    pdfFindController.executeCommand("find", { query: SEARCH_FOR });
+    eventBus.dispatch("find", { type: "", query: SEARCH_FOR });
   }
 });
 
@@ -88,10 +87,11 @@ const loadingTask = pdfjsLib.getDocument({
   cMapPacked: CMAP_PACKED,
   enableXfa: ENABLE_XFA,
 });
-loadingTask.promise.then(function (pdfDocument) {
+(async function () {
+  const pdfDocument = await loadingTask.promise;
   // Document loaded, specifying document for the viewer and
   // the (optional) linkService.
   pdfViewer.setDocument(pdfDocument);
 
   pdfLinkService.setDocument(pdfDocument, null);
-});
+})();

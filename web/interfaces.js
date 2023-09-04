@@ -14,6 +14,11 @@
  */
 /* eslint-disable getter-return */
 
+/** @typedef {import("../src/display/api").PDFPageProxy} PDFPageProxy */
+// eslint-disable-next-line max-len
+/** @typedef {import("../src/display/display_utils").PageViewport} PageViewport */
+/** @typedef {import("./ui_utils").RenderingStates} RenderingStates */
+
 /**
  * @interface
  */
@@ -42,6 +47,11 @@ class IPDFLinkService {
    * @param {number} value
    */
   set rotation(value) {}
+
+  /**
+   * @type {boolean}
+   */
+  get isInPresentationMode() {}
 
   /**
    * @type {boolean}
@@ -93,20 +103,15 @@ class IPDFLinkService {
   executeNamedAction(action) {}
 
   /**
+   * @param {Object} action
+   */
+  executeSetOCGState(action) {}
+
+  /**
    * @param {number} pageNum - page number.
    * @param {Object} pageRef - reference to the page.
    */
   cachePageRef(pageNum, pageRef) {}
-
-  /**
-   * @param {number} pageNumber
-   */
-  isPageVisible(pageNumber) {}
-
-  /**
-   * @param {number} pageNumber
-   */
-  isPageCached(pageNumber) {}
 }
 
 /**
@@ -131,94 +136,42 @@ class IRenderableView {
   /**
    * @returns {Promise} Resolved on draw completion.
    */
-  draw() {}
+  async draw() {}
 }
 
 /**
  * @interface
  */
-class IPDFTextLayerFactory {
+class IDownloadManager {
   /**
-   * @param {HTMLDivElement} textLayerDiv
-   * @param {number} pageIndex
-   * @param {PageViewport} viewport
-   * @param {boolean} enhanceTextSelection
-   * @param {EventBus} eventBus
-   * @param {TextHighlighter} highlighter
-   * @returns {TextLayerBuilder}
+   * @param {string} url
+   * @param {string} filename
+   * @param {Object} [options]
    */
-  createTextLayerBuilder(
-    textLayerDiv,
-    pageIndex,
-    viewport,
-    enhanceTextSelection = false,
-    eventBus,
-    highlighter
-  ) {}
-}
+  downloadUrl(url, filename, options) {}
 
-/**
- * @interface
- */
-class IPDFAnnotationLayerFactory {
   /**
-   * @param {HTMLDivElement} pageDiv
-   * @param {PDFPage} pdfPage
-   * @param {AnnotationStorage} [annotationStorage] - Storage for annotation
-   *   data in forms.
-   * @param {string} [imageResourcesPath] - Path for image resources, mainly
-   *   for annotation icons. Include trailing slash.
-   * @param {boolean} renderForms
-   * @param {IL10n} l10n
-   * @param {boolean} [enableScripting]
-   * @param {Promise<boolean>} [hasJSActionsPromise]
-   * @param {Object} [mouseState]
-   * @param {Promise<Object<string, Array<Object>> | null>}
-   *   [fieldObjectsPromise]
-   * @returns {AnnotationLayerBuilder}
+   * @param {Uint8Array} data
+   * @param {string} filename
+   * @param {string} [contentType]
    */
-  createAnnotationLayerBuilder(
-    pageDiv,
-    pdfPage,
-    annotationStorage = null,
-    imageResourcesPath = "",
-    renderForms = true,
-    l10n = undefined,
-    enableScripting = false,
-    hasJSActionsPromise = null,
-    mouseState = null,
-    fieldObjectsPromise = null
-  ) {}
-}
+  downloadData(data, filename, contentType) {}
 
-/**
- * @interface
- */
-class IPDFXfaLayerFactory {
   /**
-   * @param {HTMLDivElement} pageDiv
-   * @param {PDFPage} pdfPage
-   * @param {AnnotationStorage} [annotationStorage]
-   * @param {Object} [xfaHtml]
-   * @returns {XfaLayerBuilder}
+   * @param {HTMLElement} element
+   * @param {Uint8Array} data
+   * @param {string} filename
+   * @returns {boolean} Indicating if the data was opened.
    */
-  createXfaLayerBuilder(
-    pageDiv,
-    pdfPage,
-    annotationStorage = null,
-    xfaHtml = null
-  ) {}
-}
+  openOrDownloadData(element, data, filename) {}
 
-/**
- * @interface
- */
-class IPDFStructTreeLayerFactory {
   /**
-   * @param {PDFPage} pdfPage
-   * @returns {StructTreeLayerBuilder}
+   * @param {Blob} blob
+   * @param {string} url
+   * @param {string} filename
+   * @param {Object} [options]
    */
-  createStructTreeLayerBuilder(pdfPage) {}
+  download(blob, url, filename, options) {}
 }
 
 /**
@@ -240,11 +193,11 @@ class IL10n {
    * property bag. If the key was not found, translation falls back to the
    * fallback text.
    * @param {string} key
-   * @param {object} args
-   * @param {string} fallback
+   * @param {Object | null} [args]
+   * @param {string} [fallback]
    * @returns {Promise<string>}
    */
-  async get(key, args, fallback) {}
+  async get(key, args = null, fallback) {}
 
   /**
    * Translates HTML element.
@@ -254,12 +207,4 @@ class IL10n {
   async translate(element) {}
 }
 
-export {
-  IL10n,
-  IPDFAnnotationLayerFactory,
-  IPDFLinkService,
-  IPDFStructTreeLayerFactory,
-  IPDFTextLayerFactory,
-  IPDFXfaLayerFactory,
-  IRenderableView,
-};
+export { IDownloadManager, IL10n, IPDFLinkService, IRenderableView };

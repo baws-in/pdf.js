@@ -3,8 +3,6 @@
 
 //
 // Basic node example that prints document metadata and text content.
-// Requires single file built version of PDF.js -- please run
-// `gulp singlefile` before running the example.
 //
 
 // Run `gulp dist-install` to generate 'pdfjs-dist' npm package files.
@@ -825,6 +823,7 @@ loadingTask.promise
             }
 
             console.log(text);
+            page.cleanup();
           })
           .then(function () {
             console.log();

@@ -43,24 +43,23 @@ function buildSVG(viewport, textContent) {
     text.setAttribute("transform", "matrix(" + tx.join(" ") + ")");
     text.setAttribute("font-family", style.fontFamily);
     text.textContent = textItem.str;
-    svg.appendChild(text);
+    svg.append(text);
   });
   return svg;
 }
 
-function pageLoaded() {
+async function pageLoaded() {
   // Loading document and page text content
   const loadingTask = pdfjsLib.getDocument({ url: PDF_PATH });
-  loadingTask.promise.then(function (pdfDocument) {
-    pdfDocument.getPage(PAGE_NUMBER).then(function (page) {
-      const viewport = page.getViewport({ scale: PAGE_SCALE });
-      page.getTextContent().then(function (textContent) {
-        // building SVG and adding that to the DOM
-        const svg = buildSVG(viewport, textContent);
-        document.getElementById("pageContainer").appendChild(svg);
-      });
-    });
-  });
+  const pdfDocument = await loadingTask.promise;
+  const page = await pdfDocument.getPage(PAGE_NUMBER);
+  const viewport = page.getViewport({ scale: PAGE_SCALE });
+  const textContent = await page.getTextContent();
+  // building SVG and adding that to the DOM
+  const svg = buildSVG(viewport, textContent);
+  document.getElementById("pageContainer").append(svg);
+  // Release page resources.
+  page.cleanup();
 }
 
 document.addEventListener("DOMContentLoaded", function () {

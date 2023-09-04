@@ -48,7 +48,7 @@ function isWhitespaceString(s) {
 
 class XMLParserBase {
   _resolveEntities(s) {
-    return s.replace(/&([^;]+);/g, (all, entity) => {
+    return s.replaceAll(/&([^;]+);/g, (all, entity) => {
       if (entity.substring(0, 2) === "#x") {
         return String.fromCodePoint(parseInt(entity.substring(2), 16));
       } else if (entity.substring(0, 1) === "#") {
@@ -302,7 +302,7 @@ class SimpleDOMNode {
   }
 
   get firstChild() {
-    return this.childNodes && this.childNodes[0];
+    return this.childNodes?.[0];
   }
 
   get nextSibling() {
@@ -328,8 +328,12 @@ class SimpleDOMNode {
       .join("");
   }
 
+  get children() {
+    return this.childNodes || [];
+  }
+
   hasChildNodes() {
-    return this.childNodes && this.childNodes.length > 0;
+    return this.childNodes?.length > 0;
   }
 
   /**
@@ -379,7 +383,7 @@ class SimpleDOMNode {
         }
       }
 
-      if (node.childNodes && node.childNodes.length !== 0) {
+      if (node.childNodes?.length > 0) {
         stack.push([node, 0]);
         node = node.childNodes[0];
       } else if (stack.length === 0) {
@@ -490,13 +494,14 @@ class SimpleXMLParser extends XMLParserBase {
 
   onEndElement(name) {
     this._currentFragment = this._stack.pop() || [];
-    const lastElement = this._currentFragment[this._currentFragment.length - 1];
+    const lastElement = this._currentFragment.at(-1);
     if (!lastElement) {
-      return;
+      return null;
     }
-    for (let i = 0, ii = lastElement.childNodes.length; i < ii; i++) {
-      lastElement.childNodes[i].parentNode = lastElement;
+    for (const childNode of lastElement.childNodes) {
+      childNode.parentNode = lastElement;
     }
+    return lastElement;
   }
 
   onError(code) {

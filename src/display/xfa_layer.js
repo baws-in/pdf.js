@@ -13,8 +13,22 @@
  * limitations under the License.
  */
 
-import { warn } from "../shared/util.js";
+// eslint-disable-next-line max-len
+/** @typedef {import("./annotation_storage").AnnotationStorage} AnnotationStorage */
+/** @typedef {import("./display_utils").PageViewport} PageViewport */
+/** @typedef {import("../../web/interfaces").IPDFLinkService} IPDFLinkService */
+
 import { XfaText } from "./xfa_text.js";
+
+/**
+ * @typedef {Object} XfaLayerParameters
+ * @property {PageViewport} viewport
+ * @property {HTMLDivElement} div
+ * @property {Object} xfaHtml
+ * @property {AnnotationStorage} [annotationStorage]
+ * @property {IPDFLinkService} linkService
+ * @property {string} [intent] - (default value is 'display').
+ */
 
 class XfaLayer {
   static setupStorage(html, id, element, storage, intent) {
@@ -67,9 +81,12 @@ class XfaLayer {
         break;
       case "select":
         if (storedData.value !== null) {
+          html.setAttribute("value", storedData.value);
           for (const option of element.children) {
             if (option.attributes.value === storedData.value) {
               option.attributes.selected = true;
+            } else if (option.attributes.hasOwnProperty("selected")) {
+              delete option.attributes.selected;
             }
           }
         }
@@ -95,56 +112,60 @@ class XfaLayer {
       attributes.name = `${attributes.name}-${intent}`;
     }
     for (const [key, value] of Object.entries(attributes)) {
-      // We don't need to add dataId in the html object but it can
-      // be useful to know its value when writing printing tests:
-      // in this case, don't skip dataId to have its value.
-      if (value === null || value === undefined || key === "dataId") {
+      if (value === null || value === undefined) {
         continue;
       }
 
-      if (key !== "style") {
-        if (key === "textContent") {
-          html.textContent = value;
-        } else if (key === "class") {
-          html.setAttribute(key, value.join(" "));
-        } else {
-          if (isHTMLAnchorElement && (key === "href" || key === "newWindow")) {
-            continue; // Handled below.
+      switch (key) {
+        case "class":
+          if (value.length) {
+            html.setAttribute(key, value.join(" "));
           }
-          html.setAttribute(key, value);
-        }
-      } else {
-        Object.assign(html.style, value);
+          break;
+        case "dataId":
+          // We don't need to add dataId in the html object but it can
+          // be useful to know its value when writing printing tests:
+          // in this case, don't skip dataId to have its value.
+          break;
+        case "id":
+          html.setAttribute("data-element-id", value);
+          break;
+        case "style":
+          Object.assign(html.style, value);
+          break;
+        case "textContent":
+          html.textContent = value;
+          break;
+        default:
+          if (!isHTMLAnchorElement || (key !== "href" && key !== "newWindow")) {
+            html.setAttribute(key, value);
+          }
       }
     }
 
     if (isHTMLAnchorElement) {
-      if (
-        (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
-        !linkService.addLinkAttributes
-      ) {
-        warn(
-          "XfaLayer.setAttribute - missing `addLinkAttributes`-method on the `linkService`-instance."
-        );
-      }
-      linkService.addLinkAttributes?.(
+      linkService.addLinkAttributes(
         html,
         attributes.href,
         attributes.newWindow
       );
     }
 
-    // Set the value after the others to be sure overwrite
-    // any other values.
+    // Set the value after the others to be sure to overwrite any other values.
     if (storage && attributes.dataId) {
       this.setupStorage(html, attributes.dataId, element, storage);
     }
   }
 
+  /**
+   * Render the XFA layer.
+   *
+   * @param {XfaLayerParameters} parameters
+   */
   static render(parameters) {
     const storage = parameters.annotationStorage;
     const linkService = parameters.linkService;
-    const root = parameters.xfa;
+    const root = parameters.xfaHtml;
     const intent = parameters.intent || "display";
     const rootHtml = document.createElement(root.name);
     if (root.attributes) {
@@ -158,24 +179,29 @@ class XfaLayer {
     const stack = [[root, -1, rootHtml]];
 
     const rootDiv = parameters.div;
-    rootDiv.appendChild(rootHtml);
-    const transform = `matrix(${parameters.viewport.transform.join(",")})`;
-    rootDiv.style.transform = transform;
+    rootDiv.append(rootHtml);
+
+    if (parameters.viewport) {
+      const transform = `matrix(${parameters.viewport.transform.join(",")})`;
+      rootDiv.style.transform = transform;
+    }
 
     // Set defaults.
-    rootDiv.setAttribute("class", "xfaLayer xfaFont");
+    if (intent !== "richText") {
+      rootDiv.setAttribute("class", "xfaLayer xfaFont");
+    }
 
     // Text nodes used for the text highlighter.
     const textDivs = [];
 
     while (stack.length > 0) {
-      const [parent, i, html] = stack[stack.length - 1];
+      const [parent, i, html] = stack.at(-1);
       if (i + 1 === parent.children.length) {
         stack.pop();
         continue;
       }
 
-      const child = parent.children[++stack[stack.length - 1][1]];
+      const child = parent.children[++stack.at(-1)[1]];
       if (child === null) {
         continue;
       }
@@ -184,18 +210,15 @@ class XfaLayer {
       if (name === "#text") {
         const node = document.createTextNode(child.value);
         textDivs.push(node);
-        html.appendChild(node);
+        html.append(node);
         continue;
       }
 
-      let childHtml;
-      if (child?.attributes?.xmlns) {
-        childHtml = document.createElementNS(child.attributes.xmlns, name);
-      } else {
-        childHtml = document.createElement(name);
-      }
+      const childHtml = child?.attributes?.xmlns
+        ? document.createElementNS(child.attributes.xmlns, name)
+        : document.createElement(name);
 
-      html.appendChild(childHtml);
+      html.append(childHtml);
       if (child.attributes) {
         this.setAttributes({
           html: childHtml,
@@ -213,7 +236,7 @@ class XfaLayer {
         if (XfaText.shouldBuildText(name)) {
           textDivs.push(node);
         }
-        childHtml.appendChild(node);
+        childHtml.append(node);
       }
     }
 
@@ -245,11 +268,9 @@ class XfaLayer {
   }
 
   /**
-   * Update the xfa layer.
+   * Update the XFA layer.
    *
-   * @public
    * @param {XfaLayerParameters} parameters
-   * @memberof XfaLayer
    */
   static update(parameters) {
     const transform = `matrix(${parameters.viewport.transform.join(",")})`;
