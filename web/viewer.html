@@ -53,6 +53,7 @@ See https://github.com/adobe-type-tools/cmap-resources
 <!--#elif /* Development mode. */-->
     <link rel="resource" type="application/l10n" href="locale/locale.properties">
     <!-- Latest compiled JavaScript -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <link rel="stylesheet" href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css"
@@ -140,7 +141,7 @@ See https://github.com/adobe-type-tools/cmap-resources
         <div id="sidebarResizer"></div>
       </div>  <!-- sidebarContainer -->
 
-      <div id="mainContainer" onclick="onBookClick()"  oncopy="onCopy()" ">
+      <div id="mainContainer" onclick="onBookClick()" ">
         <div class="findbar hidden doorHanger" id="findbar">
           <div id="findbarInputContainer">
             <input id="findInput" class="toolbarField" title="Find" placeholder="Find in document…" tabindex="91" data-l10n-id="find_input" aria-invalid="false">
