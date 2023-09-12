@@ -1,0 +1,826 @@
+{
+    "title": "Root",
+      "dest": -2000,
+      "end": 2000,
+      "items": [
+            {
+                  "title": "Dr Ambedkar in Parliamentary Debates",
+                  "dest": 18,
+                  "end": 1118,
+                  "items": [
+                        {
+                              "title": "SECTION I 20TH NOVEMBER 1947 TO 31ST MARCH 1949",
+                              "dest": 18,
+                              "end": 65,
+                              "items": [
+                                    {
+                                          "title": "1 Foreign Exchange Regulation (Amendment Bill)",
+                                          "dest": 22,
+                                          "end": 23,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "2 Appointment of Statutory Law Revision Committee",
+                                          "dest": 24,
+                                          "end": 32,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "3 Indian Nursing Council Bill",
+                                          "dest": 33,
+                                          "end": 33,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "4 Extra Provincial Jurisdiction Bill",
+                                          "dest": 34,
+                                          "end": 42,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "5 Federal Court (Enlargement of Jurisdiction) Bill",
+                                          "dest": 43,
+                                          "end": 54,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "6 Provincial Insolvency (Amendment) Bill",
+                                          "dest": 55,
+                                          "end": 62,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "7 Resolution Re : Extension of period mentioned in Sections 2 and 3 of India Act 1946 as adapted",
+                                          "dest": 63,
+                                          "end": 65,
+                                          "items": []
+                                    }
+                              ]
+                        },
+                        {
+                              "title": "SECTION II 3RD FEBRUARY 1950 TO 20TH APRIL 1950",
+                              "dest": 70,
+                              "end": 182,
+                              "items": [
+                                    {
+                                          "title": "8. Insolvency Law (Amendment) Bill",
+                                          "dest": 70,
+                                          "end": 76,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "9. Criminal Law (Amendment) Bill",
+                                          "dest": 77,
+                                          "end": 79,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "10. Escape of Mir Laik Ali from Custody",
+                                          "dest": 80,
+                                          "end": 95,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "11. Parliament (Prevention of Disqualification Bill",
+                                          "dest": 96,
+                                          "end": 115,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "12. Motion for Adjournment",
+                                          "dest": 116,
+                                          "end": 117,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "13. Societies Registration (Amendment) Bill",
+                                          "dest": 118,
+                                          "end": 119,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "14. Army Bill",
+                                          "dest": 120,
+                                          "end": 127,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "15. Part C States (Laws) Bill",
+                                          "dest": 128,
+                                          "end": 139,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "16. Representation of the People Bill",
+                                          "dest": 140,
+                                          "end": 182,
+                                          "items": []
+                                    }
+                              ]
+                        },
+                        {
+                              "title": "SECTION III 1ST AUGUST 1950 TO 22ND DECEMBER 1950",
+                              "dest": 188,
+                              "end": 267,
+                              "items": [
+                                    {
+                                          "title": "17. Dentists (Amendment) Bill",
+                                          "dest": 188,
+                                          "end": 198,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "18. Resolution Re-making of Laws by Parliament in State List",
+                                          "dest": 199,
+                                          "end": 200,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "19. Administration of Evacuee Property (Amendment) Bill",
+                                          "dest": 201,
+                                          "end": 204,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "20. Qualifications for Elections to Parliament and Legislature of States",
+                                          "dest": 205,
+                                          "end": 209,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "21. Coach-Behar (Assimilation of Laws) Bill",
+                                          "dest": 210,
+                                          "end": 211,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "22. Indian Tariff (Fourth Amendment) Bill",
+                                          "dest": 212,
+                                          "end": 217,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "23. Societies Registration (Amendment) Bill",
+                                          "dest": 218,
+                                          "end": 221,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "24. Representation of the People (Amendment) Bill",
+                                          "dest": 222,
+                                          "end": 265,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "25. Demand No. 13\u2014Ministry of Law",
+                                          "dest": 266,
+                                          "end": 267,
+                                          "items": []
+                                    }
+                              ]
+                        },
+                        {
+                              "title": "SECTION IV 9TH FEBRUARY 1951 TO 21ST APRIL 1951",
+                              "dest": 272,
+                              "end": 439,
+                              "items": [
+                                    {
+                                          "title": "26. Dentists (Amendment) Bill",
+                                          "dest": 272,
+                                          "end": 282,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "27. Code of Civil Procedure (Amendment) Bill",
+                                          "dest": 283,
+                                          "end": 296,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "28. Part B States (Laws) Bill",
+                                          "dest": 297,
+                                          "end": 313,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "29. Supreme Court Advocates (Practice in HighCourt) Bill",
+                                          "dest": 314,
+                                          "end": 326,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "30. Code of Civil Procedure (Amendment) Bill",
+                                          "dest": 327,
+                                          "end": 333,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "31. Code of Civil Procedure (Second Amendment) Bill",
+                                          "dest": 334,
+                                          "end": 336,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "32. Jallianwala Bagh National Memorial Bill",
+                                          "dest": 337,
+                                          "end": 345,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "33. Constitution (First Amendment) Bill",
+                                          "dest": 346,
+                                          "end": 439,
+                                          "items": []
+                                    }
+                              ]
+                        },
+                        {
+                              "title": "SECTION V 18TH APRIL 1951 TO 19TH MAY 1951",
+                              "dest": 444,
+                              "end": 525,
+                              "items": [
+                                    {
+                                          "title": "34 Representation of the People (Amendment) Bill",
+                                          "dest": 444,
+                                          "end": 525,
+                                          "items": []
+                                    }
+                              ]
+                        },
+                        {
+                              "title": "REPRESENTATION OF THE PEOPLE (NO. 2) BILL",
+                              "dest": 526,
+                              "end": 727,
+                              "items": []
+                        },
+                        {
+                              "title": "SECTION VI 7TH AUGUST 1951 TO 12TH OCTOBER 1951",
+                              "dest": 728,
+                              "end": 849,
+                              "items": [
+                                    {
+                                          "title": "35. Parliament\u2014Prevention of Disqualification Bill",
+                                          "dest": 728,
+                                          "end": 759,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "36. Assam (Alteration of Boundaries) Bill",
+                                          "dest": 760,
+                                          "end": 779,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "37. Notaries Bill",
+                                          "dest": 780,
+                                          "end": 786,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "38. Resolution regarding necessity for an All India Bar",
+                                          "dest": 787,
+                                          "end": 791,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "39. Conduct of a Member of Parliament",
+                                          "dest": 792,
+                                          "end": 804,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "40. Select Committee Meetings",
+                                          "dest": 805,
+                                          "end": 808,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "41. Motions regarding delimitations of Constituencies of Order",
+                                          "dest": 809,
+                                          "end": 833,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "42. Business of the House",
+                                          "dest": 834,
+                                          "end": 839,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "43. Dr. Ambedkar\u2019s letter of Resignation",
+                                          "dest": 840,
+                                          "end": 849,
+                                          "items": []
+                                    }
+                              ]
+                        },
+                        {
+                              "title": "SECTION VII 19TH MAY 1952 TO 6TH DECEMBER 1956",
+                              "dest": 854,
+                              "end": 859,
+                              "items": [
+                                    {
+                                          "title": "44. Thanks on address by the President",
+                                          "dest": 854,
+                                          "end": 859,
+                                          "items": []
+                                    }
+                              ]
+                        },
+                        {
+                              "title": "45. Budget (General) 1952-53 General Discussion",
+                              "dest": 860,
+                              "end": 869,
+                              "items": []
+                        },
+                        {
+                              "title": "46. Andhra State Bill, 1953",
+                              "dest": 870,
+                              "end": 883,
+                              "items": []
+                        },
+                        {
+                              "title": "47. Estate Duty Bill, 1953",
+                              "dest": 884,
+                              "end": 892,
+                              "items": []
+                        },
+                        {
+                              "title": "48. International Situation",
+                              "dest": 893,
+                              "end": 905,
+                              "items": []
+                        },
+                        {
+                              "title": "49. Government order on Bank Disputes",
+                              "dest": 906,
+                              "end": 913,
+                              "items": []
+                        },
+                        {
+                              "title": "50. Report of Commissioner for Scheduled Castes and Tribes for 1953",
+                              "dest": 914,
+                              "end": 937,
+                              "items": []
+                        },
+                        {
+                              "title": "51. Constitution (Third Amendment) Bill, 1954",
+                              "dest": 938,
+                              "end": 943,
+                              "items": []
+                        },
+                        {
+                              "title": "52. Untouchability Offences Bill, 1954",
+                              "dest": 944,
+                              "end": 962,
+                              "items": []
+                        },
+                        {
+                              "title": "53. Constitution (Fourth amendment) Bill, 1954",
+                              "dest": 963,
+                              "end": 980,
+                              "items": []
+                        },
+                        {
+                              "title": "54. States Reorganisation Bill, 1956",
+                              "dest": 981,
+                              "end": 992,
+                              "items": []
+                        },
+                        {
+                              "title": "55. Obituaries reference\u2014Demise of Dr. B. R. Ambedkar",
+                              "dest": 993,
+                              "end": 1002,
+                              "items": []
+                        },
+                        {
+                              "title": "SECTION VIII ANSWERS BY DR. B. R. AMBEDKAR LAW MINISTER TO THE QUESTIONS ASKED BY THE MEMBERS OF PARLIAMENT 18TH NOVEMBER 1947 TO 28TH SEPTEMBER 1951",
+                              "dest": 1010,
+                              "end": 1118,
+                              "items": [
+                                    {
+                                          "title": "(1) Appeals from the High Courts in India",
+                                          "dest": 1010,
+                                          "end": 1011,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(2) Jurisdiction of the Judicial Committee of the Privy Council to decide Pending appeals",
+                                          "dest": 1012,
+                                          "end": 1012,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(3) Number of Cases tried by the Federal Court and Privy Council",
+                                          "dest": 1013,
+                                          "end": 1013,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(4) Constitution of the Federal Court",
+                                          "dest": 1014,
+                                          "end": 1014,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(5) Report of Hindu Law Codification Committee",
+                                          "dest": 1015,
+                                          "end": 1015,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(6) Misappropriation of Income by Hindu Charitable and Religious Trusts",
+                                          "dest": 1016,
+                                          "end": 1016,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(7) Number and Names of Tribunals appointed by Ministry of Home Affairs.",
+                                          "dest": 1016,
+                                          "end": 1017,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(8) Proposal for Reconstitution or Modification of Income-Tax Appellate Tribunal",
+                                          "dest": 1018,
+                                          "end": 1018,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(9) General Elections",
+                                          "dest": 1019,
+                                          "end": 1021,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(10) List of Schedule Castes",
+                                          "dest": 1022,
+                                          "end": 1023,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(11) Central Woolen Technological Institute",
+                                          "dest": 1024,
+                                          "end": 1026,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(12) Income-Tax Appellate Tribunals",
+                                          "dest": 1027,
+                                          "end": 1027,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(13) Scheduled Caste Employees in Ministry of Law",
+                                          "dest": 1028,
+                                          "end": 1028,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(14) Advisory Committee on Hindu Code Bill",
+                                          "dest": 1029,
+                                          "end": 1030,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(15) Salary and Allowances of the Members of Parliament",
+                                          "dest": 1031,
+                                          "end": 1031,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(16) General Elections",
+                                          "dest": 1031,
+                                          "end": 1033,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(17) General Elections",
+                                          "dest": 1034,
+                                          "end": 1037,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(18) Government agents for Supreme Court",
+                                          "dest": 1038,
+                                          "end": 1039,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(19) Muslim Personal Laws",
+                                          "dest": 1040,
+                                          "end": 1041,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(20) Engagements of Lawyers in cases against the Union",
+                                          "dest": 1042,
+                                          "end": 1042,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(21) Scheduled Caste Representatives",
+                                          "dest": 1043,
+                                          "end": 1043,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(22) Delimitation of Committee Reports",
+                                          "dest": 1043,
+                                          "end": 1043,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(23) General Elections",
+                                          "dest": 1044,
+                                          "end": 1045,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(24) Electoral Rolls for Rural Areas in Delhi",
+                                          "dest": 1046,
+                                          "end": 1047,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(25) Scrutiny of Central and State Law",
+                                          "dest": 1048,
+                                          "end": 1048,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(26) Electoral Rolls",
+                                          "dest": 1049,
+                                          "end": 1050,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(27) Lawyers in Supreme Court",
+                                          "dest": 1051,
+                                          "end": 1052,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(28) Cooch Behar (Population)",
+                                          "dest": 1053,
+                                          "end": 1053,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(29) Electoral Rolls",
+                                          "dest": 1054,
+                                          "end": 1054,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(30) Manufacture of Ballot Boxes",
+                                          "dest": 1055,
+                                          "end": 1056,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(31) Dissolution of Parliament",
+                                          "dest": 1057,
+                                          "end": 1057,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(32) Electoral Rolls",
+                                          "dest": 1057,
+                                          "end": 1057,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(33) West Bengal Legislature (Vacancies)",
+                                          "dest": 1058,
+                                          "end": 1058,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(34) General Elections in Madras",
+                                          "dest": 1059,
+                                          "end": 1060,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(35) General Elections in Orissa",
+                                          "dest": 1061,
+                                          "end": 1061,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(36) Regional Commissioners",
+                                          "dest": 1062,
+                                          "end": 1062,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(37) Fixing of Election Dates",
+                                          "dest": 1063,
+                                          "end": 1063,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(38) Dates of General Election in States",
+                                          "dest": 1064,
+                                          "end": 1066,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(39) Symbols for Political Parties",
+                                          "dest": 1067,
+                                          "end": 1067,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(40) Electoral Rolls for General Elections",
+                                          "dest": 1068,
+                                          "end": 1068,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(41) Women Voters and Electoral Rolls",
+                                          "dest": 1069,
+                                          "end": 1069,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(42) Central Grants for Backward Classes",
+                                          "dest": 1069,
+                                          "end": 1070,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(43) Grants for Promoting National Language",
+                                          "dest": 1071,
+                                          "end": 1073,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(44) Mode of Voting at General Elections",
+                                          "dest": 1074,
+                                          "end": 1074,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(45) Statutory and Non-Statutory Bodies",
+                                          "dest": 1075,
+                                          "end": 1075,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(46) Elections in Snow-Clad Areas of Punjab",
+                                          "dest": 1076,
+                                          "end": 1076,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(47) Manufacture of Ballot Boxes",
+                                          "dest": 1077,
+                                          "end": 1077,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(48) Hindi Translation of Acts",
+                                          "dest": 1077,
+                                          "end": 1079,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(49) Mock Elections",
+                                          "dest": 1080,
+                                          "end": 1081,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(50) Objections to Electoral Rolls",
+                                          "dest": 1082,
+                                          "end": 1084,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(51) Election Commissioners in States",
+                                          "dest": 1085,
+                                          "end": 1085,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(52) Electoral Rolls",
+                                          "dest": 1086,
+                                          "end": 1086,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(53) Mock Elections",
+                                          "dest": 1087,
+                                          "end": 1087,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(54) Article 171(b) of the Constitution",
+                                          "dest": 1087,
+                                          "end": 1087,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(55) Maps of Constituencies",
+                                          "dest": 1088,
+                                          "end": 1089,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(56) Tribal Christians and General Elections",
+                                          "dest": 1090,
+                                          "end": 1090,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(57) Officers in the Ministry of Law",
+                                          "dest": 1091,
+                                          "end": 1091,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(58) List of Polling Stations",
+                                          "dest": 1091,
+                                          "end": 1093,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(59) Leprosy",
+                                          "dest": 1094,
+                                          "end": 1094,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(60) Lady Hardinge Medical College",
+                                          "dest": 1095,
+                                          "end": 1096,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(61) Training of Midwives and Nurses",
+                                          "dest": 1097,
+                                          "end": 1097,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(62) Emetine",
+                                          "dest": 1097,
+                                          "end": 1097,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(63) Ayurvedic Research Institute",
+                                          "dest": 1098,
+                                          "end": 1098,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(64) Directorate of Housing",
+                                          "dest": 1099,
+                                          "end": 1099,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(65) Lepers",
+                                          "dest": 1100,
+                                          "end": 1101,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(66) Hartal of Refugee Stall Holders",
+                                          "dest": 1102,
+                                          "end": 1103,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(67) Petition of Mahila Samiti, Jaipur regarding Women Voters of Rajasthan.",
+                                          "dest": 1104,
+                                          "end": 1104,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(68) Hindu Divorce",
+                                          "dest": 1105,
+                                          "end": 1105,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "(69) Prevention of Hindu Bigamous Marriages Act",
+                                          "dest": 1106,
+                                          "end": 1107,
+                                          "items": []
+                                    },
+                                    {
+                                          "title": "ANNEXURE",
+                                          "dest": 1107,
+                                          "end": 1118,
+                                          "items": []
+                                    }
+                              ]
+                        }
+                  ]
+            }
+      ]
+}

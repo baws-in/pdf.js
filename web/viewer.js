@@ -102,7 +102,7 @@ function getViewerConfiguration() {
       toggleButton: document.getElementById("sidebarToggle"),
       resizer: document.getElementById("sidebarResizer"),
       // Buttons
-      thumbnailButton: document.getElementById("viewThumbnail"),
+      //thumbnailButton: document.getElementById("viewThumbnail"),
       outlineButton: document.getElementById("viewOutline"),
       attachmentsButton: document.getElementById("viewAttachments"),
       layersButton: document.getElementById("viewLayers"),

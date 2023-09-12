@@ -26,12 +26,12 @@ import { SidebarView } from "./ui_utils.js";
  */
 
 /**
- * @typedef {Object} BAWSOutlineViewerRenderParameters
+ * @typedef {Object} PDFOutlineViewerRenderParameters
  * @property {Array|null} outline - An array of outline objects.
  * @property {PDFDocument} pdfDocument - A {PDFDocument} instance.
  */
 
-class PDFOutlineViewer extends BaseTreeViewer {
+class BAWSOutlineViewer extends BaseTreeViewer {
   /**
    * @param {PDFOutlineViewerOptions} options
    */
@@ -91,8 +91,7 @@ class PDFOutlineViewer extends BaseTreeViewer {
   _dispatchEvent(outlineCount) {
     this._currentOutlineItemCapability = new PromiseCapability();
     if (
-      outlineCount === 0 ||
-      this._pdfDocument?.loadingParams.disableAutoFetch
+      outlineCount === 0 
     ) {
       this._currentOutlineItemCapability.resolve(/* enabled = */ false);
     } else if (this._isPagesLoaded !== null) {
@@ -155,7 +154,7 @@ class PDFOutlineViewer extends BaseTreeViewer {
       this._updateCurrentTreeItem(evt.target.parentNode);
 
       if (dest) {
-        linkService.goToDestination(dest);
+        linkService.goToPage(dest); // TODO: Add code to turn page
       }
       return false;
     };
@@ -208,7 +207,7 @@ class PDFOutlineViewer extends BaseTreeViewer {
   }
 
   /**
-   * @param {BAWSOutlineViewerRenderParameters} params
+   * @param {PDFOutlineViewerRenderParameters} params
    */
   render({ outline, pdfDocument }) {
     if (this._outline) {
@@ -223,7 +222,7 @@ class PDFOutlineViewer extends BaseTreeViewer {
     }
 
     const fragment = document.createDocumentFragment();
-    const queue = [{ parent: fragment, items: outline }];
+    const queue = [{ parent: fragment, items: outline.items }];
     let outlineCount = 0,
       hasAnyNesting = false;
     while (queue.length > 0) {
@@ -269,6 +268,7 @@ class PDFOutlineViewer extends BaseTreeViewer {
     if (!this._outline || !this._pdfDocument) {
       return;
     }
+    //TODO just for safety let's keep desthash as BAWS.Level.PageNumber 
 
     const pageNumberToDestHash = await this._getPageNumberToDestHash(
       this._pdfDocument
@@ -305,72 +305,8 @@ class PDFOutlineViewer extends BaseTreeViewer {
    * @private
    */
   async _getPageNumberToDestHash(pdfDocument) {
-    if (this._pageNumberToDestHashCapability) {
-      return this._pageNumberToDestHashCapability.promise;
-    }
-    this._pageNumberToDestHashCapability = new PromiseCapability();
-
-    const pageNumberToDestHash = new Map(),
-      pageNumberNesting = new Map();
-    const queue = [{ nesting: 0, items: this._outline }];
-    while (queue.length > 0) {
-      const levelData = queue.shift(),
-        currentNesting = levelData.nesting;
-      for (const { dest, items } of levelData.items) {
-        let explicitDest, pageNumber;
-        if (typeof dest === "string") {
-          explicitDest = await pdfDocument.getDestination(dest);
-
-          if (pdfDocument !== this._pdfDocument) {
-            return null; // The document was closed while the data resolved.
-          }
-        } else {
-          explicitDest = dest;
-        }
-        if (Array.isArray(explicitDest)) {
-          const [destRef] = explicitDest;
-
-          if (typeof destRef === "object" && destRef !== null) {
-            pageNumber = this.linkService._cachedPageNumber(destRef);
-
-            if (!pageNumber) {
-              try {
-                pageNumber = (await pdfDocument.getPageIndex(destRef)) + 1;
-
-                if (pdfDocument !== this._pdfDocument) {
-                  return null; // The document was closed while the data resolved.
-                }
-                this.linkService.cachePageRef(pageNumber, destRef);
-              } catch {
-                // Invalid page reference, ignore it and continue parsing.
-              }
-            }
-          } else if (Number.isInteger(destRef)) {
-            pageNumber = destRef + 1;
-          }
-
-          if (
-            Number.isInteger(pageNumber) &&
-            (!pageNumberToDestHash.has(pageNumber) ||
-              currentNesting > pageNumberNesting.get(pageNumber))
-          ) {
-            const destHash = this.linkService.getDestinationHash(dest);
-            pageNumberToDestHash.set(pageNumber, destHash);
-            pageNumberNesting.set(pageNumber, currentNesting);
-          }
-        }
-
-        if (items.length > 0) {
-          queue.push({ nesting: currentNesting + 1, items });
-        }
-      }
-    }
-
-    this._pageNumberToDestHashCapability.resolve(
-      pageNumberToDestHash.size > 0 ? pageNumberToDestHash : null
-    );
-    return this._pageNumberToDestHashCapability.promise;
   }
+
 }
 
-export { PDFOutlineViewer };
+export { BAWSOutlineViewer };

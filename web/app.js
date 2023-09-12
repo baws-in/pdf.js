@@ -66,6 +66,7 @@ import { PDFFindController } from "./pdf_find_controller.js";
 import { PDFHistory } from "./pdf_history.js";
 import { PDFLayerViewer } from "web-pdf_layer_viewer";
 import { PDFOutlineViewer } from "web-pdf_outline_viewer";
+import { BAWSOutlineViewer } from "web-baws_outline_viewer";
 import { PDFPresentationMode } from "web-pdf_presentation_mode";
 import { PDFRenderingQueue } from "./pdf_rendering_queue.js";
 import { PDFScriptingManager } from "./pdf_scripting_manager.js";
@@ -179,7 +180,7 @@ const PDFViewerApplication = {
   pdfHistory: null,
   /** @type {PDFSidebar} */
   pdfSidebar: null,
-  /** @type {PDFOutlineViewer} */
+  /** @type {BAWSOutlineViewer} */
   pdfOutlineViewer: null,
   /** @type {PDFAttachmentViewer} */
   pdfAttachmentViewer: null,
@@ -643,7 +644,7 @@ const PDFViewerApplication = {
     }
 
     if (appConfig.sidebar?.outlineView) {
-      this.pdfOutlineViewer = new PDFOutlineViewer({
+      this.pdfOutlineViewer = new BAWSOutlineViewer({
         container: appConfig.sidebar.outlineView,
         eventBus,
         linkService: pdfLinkService,
@@ -1473,7 +1474,7 @@ const PDFViewerApplication = {
       });
 
       if (this.pdfOutlineViewer) {
-        pdfDocument.getOutline().then(outline => {
+        this._getOutline(this._downloadUrl+".json").then(outline => {
           if (pdfDocument !== this.pdfDocument) {
             return; // The document was closed while the outline resolved.
           }
@@ -1651,7 +1652,30 @@ const PDFViewerApplication = {
 
     this.eventBus.dispatch("metadataloaded", { source: this });
   },
+  
+  /**
+   * @private
+   */
+  async _getOutline(load_url)
+  {
+    const getJSON = async url => {
+      const response = await fetch(url);
+      if(!response.ok) // check if response worked (no 404 errors etc...)
+        throw new Error(response.statusText);
+     
+    
+      const data = response.json(); // get JSON from the response
+      return data; // returns a promise, which resolves to this data value
+    }
+    const toObject = (arr) =>
+    Object.assign(...arr.map(({name, children, ...rest}) =>
+        ({ [name]: Object.assign(rest, children && toObject(children)) })
+    ));
 
+    console.log("Fetching outline data...");
+    let jsondata = await getJSON(load_url)
+    return jsondata;
+  },
   /**
    * @private
    */

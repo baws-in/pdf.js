@@ -22,7 +22,7 @@
    --inline-end: right;
    /*#endif*/
  
-   --sidebar-width: 200px;
+   --sidebar-width: 300px;
    --sidebar-transition-duration: 200ms;
    --sidebar-transition-timing-function: ease;
  
@@ -267,6 +267,7 @@
    inset-block: 32px 0;
    inset-inline-start: calc(-1 * var(--sidebar-width));
    width: var(--sidebar-width);
+   height: 85%;
    visibility: hidden;
    z-index: 100;
    font: message-box;
@@ -1211,7 +1212,7 @@
  
  .treeWithDeepNesting > .treeItem,
  .treeItem > .treeItems {
-   margin-inline-start: 20px;
+   margin-inline-start: 5px;
  }
  
  .treeItem > a {

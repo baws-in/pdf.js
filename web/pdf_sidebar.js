@@ -209,11 +209,11 @@ class PDFSidebar {
     this.active = view;
 
     // Update the CSS classes (and aria attributes), for all buttons and views.
-    toggleCheckedBtn(
+    /*toggleCheckedBtn(
       this.thumbnailButton,
       view === SidebarView.THUMBS,
       this.thumbnailView
-    );
+    );*/
     toggleCheckedBtn(
       this.outlineButton,
       view === SidebarView.OUTLINE,
@@ -339,9 +339,9 @@ class PDFSidebar {
     });
 
     // Buttons for switching views.
-    this.thumbnailButton.addEventListener("click", () => {
+    /*this.thumbnailButton.addEventListener("click", () => {
       this.switchView(SidebarView.THUMBS);
-    });
+    });*/
 
     this.outlineButton.addEventListener("click", () => {
       this.switchView(SidebarView.OUTLINE);

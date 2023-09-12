@@ -82,6 +82,7 @@ See https://github.com/adobe-type-tools/cmap-resources
           "web-pdf_find_bar": "./pdf_find_bar.js",
           "web-pdf_layer_viewer": "./pdf_layer_viewer.js",
           "web-pdf_outline_viewer": "./pdf_outline_viewer.js",
+          "web-baws_outline_viewer": "./baws_outline_viewer.js",
           "web-pdf_presentation_mode": "./pdf_presentation_mode.js",
           "web-pdf_sidebar": "./pdf_sidebar.js",
           "web-pdf_thumbnail_viewer": "./pdf_thumbnail_viewer.js",
@@ -103,10 +104,10 @@ See https://github.com/adobe-type-tools/cmap-resources
         <div id="toolbarSidebar">
           <div id="toolbarSidebarLeft">
             <div id="sidebarViewButtons" class="splitToolbarButton toggled" role="radiogroup">
-              <button id="viewThumbnail" class="toolbarButton toggled" title="Show Thumbnails" tabindex="2" data-l10n-id="thumbs" role="radio" aria-checked="true" aria-controls="thumbnailView">
+              <!--<button id="viewThumbnail" class="toolbarButton toggled" display="none" title="Show Thumbnails" tabindex="2" data-l10n-id="thumbs" role="radio" aria-checked="true" aria-controls="thumbnailView">
                  <span data-l10n-id="thumbs_label">Thumbnails</span>
-              </button>
-              <button id="viewOutline" class="toolbarButton" title="Show Document Outline (double-click to expand/collapse all items)" tabindex="3" data-l10n-id="document_outline" role="radio" aria-checked="false" aria-controls="outlineView">
+              </button>-->
+              <button id="viewOutline" class="toolbarButton" title="Show Document Outline (double-click to expand/collapse all items)" tabindex="3" data-l10n-id="document_outline" role="radio" aria-checked="true" aria-controls="outlineView">
                  <span data-l10n-id="document_outline_label">Document Outline</span>
               </button>
               <button id="viewAttachments" class="toolbarButton" title="Show Attachments" tabindex="4" data-l10n-id="attachments" role="radio" aria-checked="false" aria-controls="attachmentsView">
@@ -129,8 +130,8 @@ See https://github.com/adobe-type-tools/cmap-resources
           </div>
         </div>
         <div id="sidebarContent">
-          <div id="thumbnailView">
-          </div>
+          <!--<div id="thumbnailView">
+          </div>-->
           <div id="outlineView" class="hidden">
           </div>
           <div id="attachmentsView" class="hidden">
@@ -334,7 +335,7 @@ See https://github.com/adobe-type-tools/cmap-resources
                   <input type="number" id="pageNumber" class="toolbarField" title="Page" value="1" min="1" tabindex="15" data-l10n-id="page" autocomplete="off">
                   <span id="numPages" class="toolbarLabel"></span>
                 </div>
-                <div id="toolbarViewerRight">
+                <div id="toolbarViewerRight" hidden>
   <!--#if GENERIC-->
                   <button id="openFile" class="toolbarButton hiddenLargeView" title="Open File" tabindex="31" data-l10n-id="open_file">
                     <span data-l10n-id="open_file_label">Open</span>
