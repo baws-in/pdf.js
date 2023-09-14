@@ -39,6 +39,7 @@ class BAWSOutlineViewer extends BaseTreeViewer {
     super(options);
     this.linkService = options.linkService;
     this.downloadManager = options.downloadManager;
+    this.page2element = {};
 
     this.eventBus._on("toggleoutlinetree", this._toggleAllTreeItems.bind(this));
     this.eventBus._on(
@@ -233,6 +234,7 @@ class BAWSOutlineViewer extends BaseTreeViewer {
 
         const element = document.createElement("a");
         this._bindLink(element, item);
+        this.page2element[item.dest] = element;
         this._setStyles(element, item);
         element.textContent = this._normalizeTextContent(item.title);
 
@@ -270,31 +272,10 @@ class BAWSOutlineViewer extends BaseTreeViewer {
     }
     //TODO just for safety let's keep desthash as BAWS.Level.PageNumber 
 
-    const pageNumberToDestHash = await this._getPageNumberToDestHash(
-      this._pdfDocument
-    );
-    if (!pageNumberToDestHash) {
-      return;
-    }
-    this._updateCurrentTreeItem(/* treeItem = */ null);
 
-    if (this._sidebarView !== SidebarView.OUTLINE) {
-      return; // The outline view is no longer visible, hence do nothing.
-    }
-    // When there is no destination on the current page, always check the
-    // previous ones in (reverse) order.
-    for (let i = this._currentPageNumber; i > 0; i--) {
-      const destHash = pageNumberToDestHash.get(i);
-      if (!destHash) {
-        continue;
-      }
-      const linkElement = this.container.querySelector(`a[href="${destHash}"]`);
-      if (!linkElement) {
-        continue;
-      }
-      this._scrollToCurrentTreeItem(linkElement.parentNode);
-      break;
-    }
+    this._scrollToCurrentTreeItem(this.page2element[this._currentPageNumber].parentNode);
+    
+    
   }
 
   /**

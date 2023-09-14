@@ -40,10 +40,10 @@ const PresentationModeState = {
 const SidebarView = {
   UNKNOWN: -1,
   NONE: 0,
-  THUMBS: 1, // Default value.
-  OUTLINE: 2,
-  ATTACHMENTS: 3,
-  LAYERS: 4,
+  //THUMBS: 1, // Default value.
+  OUTLINE: 1,
+  ATTACHMENTS: 2,
+  LAYERS:3,
 };
 
 const TextLayerMode = {

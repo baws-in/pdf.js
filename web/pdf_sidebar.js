@@ -81,7 +81,7 @@ class PDFSidebar {
    */
   constructor({ elements, eventBus, l10n }) {
     this.isOpen = false;
-    this.active = SidebarView.THUMBS;
+    this.active = SidebarView.OUTLINE;
     this.isInitialViewSet = false;
     this.isInitialEventDispatched = false;
 
@@ -124,7 +124,7 @@ class PDFSidebar {
     this.isInitialEventDispatched = false;
 
     this.#hideUINotification(/* reset = */ true);
-    this.switchView(SidebarView.THUMBS);
+    this.switchView(SidebarView.OUTLINE);
 
     this.outlineButton.disabled = false;
     this.attachmentsButton.disabled = false;
@@ -258,8 +258,8 @@ class PDFSidebar {
 
     this.outerContainer.classList.add("sidebarMoving", "sidebarOpen");
 
-    if (this.active === SidebarView.THUMBS) {
-      this.onUpdateThumbnails();
+    if (this.active === SidebarView.OUTLINE) {
+      this.switchView(SidebarView.OUTLINE, true);
     }
     this.onToggled();
     this.#dispatchEvent();

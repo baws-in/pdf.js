@@ -229,6 +229,7 @@ class PDFViewer {
 
   #textLayerMode = TextLayerMode.ENABLE;
 
+
   /**
    * @param {PDFViewerOptions} options
    */
@@ -267,6 +268,7 @@ class PDFViewer {
         this._getVisiblePages().ids.has(pageNumber);
     }
     this._scriptingManager = options.scriptingManager || null;
+    this.removePageBorders = true;
     this.#textLayerMode = options.textLayerMode ?? TextLayerMode.ENABLE;
     this.#annotationMode =
       options.annotationMode ?? AnnotationMode.ENABLE_FORMS;

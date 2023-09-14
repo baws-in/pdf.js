@@ -519,6 +519,7 @@ const PDFViewerApplication = {
         AppOptions.get("enableScripting") && pdfScriptingManager,
       l10n,
       textLayerMode: AppOptions.get("textLayerMode"),
+      removePageBorders: AppOptions.get("removePageBorders"),
       annotationMode: AppOptions.get("annotationMode"),
       annotationEditorMode,
       imageResourcesPath: AppOptions.get("imageResourcesPath"),
@@ -1412,7 +1413,7 @@ const PDFViewerApplication = {
           this.eventBus.dispatch("documentinit", { source: this });
           // Make all navigation keys work on document load,
           // unless the viewer is embedded in a web page.
-          if (!this.isViewerEmbedded) {
+          if (!this.isViewerEmbedded || true) {
             pdfViewer.focus();
           }
 

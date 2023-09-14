@@ -166,7 +166,7 @@ const defaultOptions = {
   },
   printResolution: {
     /** @type {number} */
-    value: 150,
+    value: 300,
     kind: OptionKind.VIEWER,
   },
   sidebarViewOnLoad: {
@@ -187,6 +187,11 @@ const defaultOptions = {
   textLayerMode: {
     /** @type {number} */
     value: 1,
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
+  },
+  removePageBorders: {
+    /** @type {boolean} */
+    value: true,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
   },
   viewerCssTheme: {
