@@ -2145,7 +2145,7 @@ class PDFViewer {
       steps ??= 1;
       do {
         newScale =
-          Math.ceil((newScale * DEFAULT_SCALE_DELTA).toFixed(2) * 10) / 10;
+          Math.ceil((newScale * DEFAULT_SCALE_DELTA).toFixed(2) * 100) / 100;
       } while (--steps > 0 && newScale < MAX_SCALE);
     }
     this.#setScale(Math.min(MAX_SCALE, newScale), {
@@ -2169,7 +2169,7 @@ class PDFViewer {
       steps ??= 1;
       do {
         newScale =
-          Math.floor((newScale / DEFAULT_SCALE_DELTA).toFixed(2) * 10) / 10;
+          Math.floor((newScale / DEFAULT_SCALE_DELTA).toFixed(2) * 100) / 100;
       } while (--steps > 0 && newScale > MIN_SCALE);
     }
     this.#setScale(Math.max(MIN_SCALE, newScale), {
