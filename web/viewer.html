@@ -40,11 +40,7 @@ See https://github.com/adobe-type-tools/cmap-resources
 <!--#include viewer-snippet.html-->
 <!--#endif-->
 
-<!--#if MOZCENTRAL-->
-<!--<link rel="stylesheet" href="resource://pdf.js/web/viewer.css">-->
-<!--#else-->
-    <link rel="stylesheet" href="viewer.css">
-<!--#endif-->
+
 
 <!--#if MOZCENTRAL-->
 <!--<script src="resource://pdf.js/web/viewer.js"></script>-->
@@ -99,6 +95,11 @@ See https://github.com/adobe-type-tools/cmap-resources
     </script>
 <!--#endif-->
 
+<!--#if MOZCENTRAL-->
+<!--<link rel="stylesheet" href="resource://pdf.js/web/viewer.css">-->
+<!--#else-->
+<link rel="stylesheet" href="viewer.css">
+<!--#endif-->
 
     <script src="viewer.js" type="module-shim"></script>
     <script src="viewer-flexi.js"></script>
@@ -553,7 +554,7 @@ See https://github.com/adobe-type-tools/cmap-resources
 </div>
 
 <!---->
-<div class="col-12 fixed-bottom">
+<div class="col-12 fixed-bottom"  style=" background-color: white; " >
     <button class="btn btn col-3 " type="button" style="font-size : 2em; " onclick="loadSearchPage()">&#128281;</button>
     <button class="btn btn col-2 " type="button" data-bs-toggle="offcanvas" data-bs-target="#voicePanel" aria-controls="voicePanel"><i
             class="fal fa-headphones-alt fa-2x"></i></button>

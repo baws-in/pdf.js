@@ -305,6 +305,9 @@
    position: absolute;
    inset: 32px 0 0;
    outline: none;
+   display: flex;
+   align-items: center;
+   justify-content: center;
  }
  #viewerContainer:not(.pdfPresentationMode) {
    transition-duration: var(--sidebar-transition-duration);
@@ -1513,7 +1516,7 @@
     top: 50%;
     left: 4%;
     transform: translate(-50%,-50%);
-    font-size: 3em; 
+    font-size: 2em; 
     color: var(--bs-red);
 }
 .page_next_icon{
@@ -1522,7 +1525,7 @@
     top: 50%;
     right: 2%;
     transform: translate(-50%,-50%);
-    font-size: 3em; 
+    font-size: 2em; 
     color: var(--bs-red);
 }
 
