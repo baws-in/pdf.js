@@ -670,7 +670,11 @@ function loadNotesPage() {
   
       if (true) {
         let urlData = getBookUrlData();
-        let shortUrl = ('localhost' === window.location.hostname ? '' : window.location.hostname) +"/books/" + urlData.bookParent + "/" + urlData.language + "/" + urlData.bookName + "/pdf/" + urlData.pageNo
+        let shortUrl = window.location.protocol + '//' 
+                      + ('localhost' === window.location.hostname ? 'baws.in' : window.location.hostname) 
+                      +"/books/" + urlData.bookParent + "/" + urlData.language + "/" + urlData.bookName 
+                      + "/pdf/" + urlData.pageNo ;
+                      
         selectedText = sel.toString().replace(/(\r\n|\n|\r)/gm, " ");
         
         if(window && window.getSelection() && window.getSelection().toString().length > 0){
