@@ -1333,7 +1333,7 @@ class PDFViewer {
         [hPadding, vPadding] = [vPadding, hPadding]; // Swap the padding values.
       }
       const pageWidthScale =
-        (((this.container.clientWidth - hPadding) / currentPage.width) *
+        (((this.container.clientWidth *1.15) / currentPage.width) *
           currentPage.scale) /
         this.#pageWidthScaleFactor;
       const pageHeightScale =

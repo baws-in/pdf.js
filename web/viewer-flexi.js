@@ -632,7 +632,7 @@ function loadNotesPage() {
     var myOffcanvas = document.getElementById('dictionaryPanel');
     var bsOffcanvas = new bootstrap.Offcanvas(myOffcanvas)
     bsOffcanvas.show();
-    setTimeout(hideDictionaryPanel, 15000);
+    setTimeout(hideDictionaryPanel, 10000);
   }
   function hideDictionaryPanel() {
     var myOffcanvas = document.getElementById('dictionaryPanel');
@@ -659,6 +659,37 @@ function loadNotesPage() {
     let openedCanvas = bootstrap.Offcanvas.getInstance(myOffcanvas);
     openedCanvas.hide();
   }
+
+  function shareButtonClick(){
+
+    if (window.getSelection() && window) {
+      console.log(PDFViewerApplication)
+      console.log(window.location.origin)
+      let sel = window.getSelection();
+  
+  
+      if (true) {
+        let urlData = getBookUrlData();
+        let shortUrl = ('localhost' === window.location.hostname ? '' : window.location.hostname) +"/books/" + urlData.bookParent + "/" + urlData.language + "/" + urlData.bookName + "/pdf/" + urlData.pageNo
+        selectedText = sel.toString().replace(/(\r\n|\n|\r)/gm, " ");
+        
+        if(window && window.getSelection() && window.getSelection().toString().length > 0){
+          selectedText = "From Dr Ambedkar's writings and speeches:\n" + selectedText + "\n\nto read more please go to " + shortUrl;
+          navigator.clipboard.writeText(selectedText);
+          genericShowPanel("Selected text and address to current page copied, please paste to share",3000);
+        }
+        else{
+          selectedText = shortUrl;
+          navigator.clipboard.writeText(selectedText);
+          genericShowPanel("Address to current page copied, please paste to share",3000);
+        }
+
+      }
+    }
+
+  }
+
+
   function addBookMark() {
     let bookMarksStr = localStorage.getItem('bookMarks');
     let bookMarks = [];
