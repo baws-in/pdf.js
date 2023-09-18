@@ -1,6 +1,7 @@
 var selectedText = "";
 var moreReadable = true;
 var isBookLoaded = false;
+var flexi_isFullscreen = false;
 var scrolllerWatch;
 if ('speechSynthesis' in window) {
   var msg = new SpeechSynthesisUtterance();
@@ -10,6 +11,8 @@ if ('speechSynthesis' in window) {
 }
 
 $(document).ready(function () {
+
+
 
   $(".moreReadable").click(function (event) {
     // moreReadable = !moreReadable;
@@ -119,6 +122,14 @@ $(document).ready(function () {
         isBookLoaded = true
         this._isPagesLoaded = !!evt.pagesCount;
         console.log(synth)
+        if (!isOnMobile()){
+          const div = document.getElementsByClassName('page')[0];
+          const span = document.getElementsByClassName('page_full_icon')[0];
+          const rect = div.getBoundingClientRect();
+          const position = window.innerWidth - rect.right ;
+          span.style.right = position*1.1 + 'px';
+        }
+
       });
       PDFViewerApplication.eventBus._on("pagechanging", evt => {
         if (evt.pageNumber)
@@ -168,7 +179,22 @@ $(document).ready(function () {
   startWatching()
 
 });
+function fullScreen()
+{
+  let mainContainer = document.getElementById("outerContainer");
 
+  if (!mainContainer.requestFullscreen) {
+    return false;
+  }
+
+  if (flexi_isFullscreen){
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+  }
+  mainContainer.requestFullscreen();
+  flexi_isFullscreen = true;
+}
 function storeScrolling(scrolllerWatch) {
   let viewContainer = document.getElementById("viewerContainer");
   let pdfMeta = localStorage.getItem("pdfMeta")
@@ -674,7 +700,7 @@ function loadNotesPage() {
                       + ('localhost' === window.location.hostname ? 'baws.in' : window.location.hostname) 
                       +"/books/" + urlData.bookParent + "/" + urlData.language + "/" + urlData.bookName 
                       + "/pdf/" + urlData.pageNo ;
-                      
+
         selectedText = sel.toString().replace(/(\r\n|\n|\r)/gm, " ");
         
         if(window && window.getSelection() && window.getSelection().toString().length > 0){

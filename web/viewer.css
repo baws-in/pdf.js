@@ -1528,7 +1528,7 @@
     color: var(--bs-red);
 }
 
-.page_close_icon{
+.page_full_icon{
   z-index: 12;
   position: fixed;
     top: 7%;
