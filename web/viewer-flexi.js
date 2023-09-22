@@ -1,14 +1,21 @@
+//import { PDFViewerApplication } from "./app";
+
 var selectedText = "";
 var moreReadable = true;
 var isBookLoaded = false;
 var flexi_isFullscreen = false;
 var scrolllerWatch;
-if ('speechSynthesis' in window) {
+
+if ('speechSynthesis' in window ) {
   var msg = new SpeechSynthesisUtterance();
   var synth = window.speechSynthesis;
-  var audioMeta = { voices: null, isSpeaking: false, readingLines: 10, currentPara: 0 }
+  var audioMeta = { voices: null, isSpeaking: false, currentPara: 0 , totalReadItems:0, itemsToRead: [] }
   setVoices()
 }
+
+let wakeLock = null;
+
+
 
 $(document).ready(function () {
 
@@ -112,6 +119,7 @@ $(document).ready(function () {
   let scondsCount = 0;
   let loadPdfTimeOut
 
+
   function startWatching() {
     loadPdfTimeOut = setTimeout(loadPdfApp, 1000);
   }
@@ -120,18 +128,12 @@ $(document).ready(function () {
     if (PDFViewerApplication) {
       PDFViewerApplication.eventBus._on("pagesloaded", evt => {
         isBookLoaded = true
+        postBawsMsg("pageChanged");
         this._isPagesLoaded = !!evt.pagesCount;
         console.log(synth)
-        if (!isOnMobile()){
-          const div = document.getElementsByClassName('page')[0];
-          const span = document.getElementsByClassName('page_full_icon')[0];
-          const rect = div.getBoundingClientRect();
-          const position = window.innerWidth - rect.right ;
-          span.style.right = position*1.1 + 'px';
-        }
-
       });
       PDFViewerApplication.eventBus._on("pagechanging", evt => {
+        isBookLoaded = true;
         if (evt.pageNumber)
           postBawsMsg("pageChanged");
         setScrolling();
@@ -140,6 +142,13 @@ $(document).ready(function () {
         }
         scrolllerWatch = setInterval(storeScrolling, 5000, scrolllerWatch);
         this._isPagesLoaded = !!evt.pagesCount;
+        if (!isOnMobile()){
+          const div = document.getElementsByClassName('page')[0];
+          const span = document.getElementsByClassName('page_full_icon')[0];
+          const rect = div.getBoundingClientRect();
+          const position = window.innerWidth - rect.right ;
+          span.style.right = position*1.1 + 'px';
+        }
       });
       clearTimeout(loadPdfTimeOut)
     }
@@ -179,7 +188,23 @@ $(document).ready(function () {
   startWatching()
 
 });
-function fullScreen()
+
+// Function that attempts to request a screen wake lock.
+const requestWakeLock = async () => {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        console.log('Screen Wake Lock released:', wakeLock.released);
+        genericShowPanel('Screen Wake Lock released:'+ wakeLock.released, 2000);
+      });
+      console.log('Screen Wake Lock released:', wakeLock.released);
+      genericShowPanel('Screen Wake Lock released:'+ wakeLock.released, 2000);
+    } catch (err) {
+      console.error(`${err.name}, ${err.message}`);
+    }
+  };
+
+async function fullScreen()
 {
   let mainContainer = document.getElementById("outerContainer");
 
@@ -190,10 +215,23 @@ function fullScreen()
   if (flexi_isFullscreen){
     if (document.exitFullscreen) {
       document.exitFullscreen();
+      flexi_isFullscreen = false;
+      return;
     }
   }
+  
+  mainContainer.addEventListener("fullscreenchange", (event) => {
+    if (!document.fullscreenElement) {
+      if (wakeLock){ 
+        wakeLock.release();
+      }
+      wakeLock = null;
+    }
+  });
   mainContainer.requestFullscreen();
   flexi_isFullscreen = true;
+  await requestWakeLock();
+
 }
 function storeScrolling(scrolllerWatch) {
   let viewContainer = document.getElementById("viewerContainer");
@@ -360,7 +398,7 @@ function isOnMobile() {
   return check;
 };
 //audio start
-async function startNodeReading(contentNode, startIndex) {
+async function startNodeReadingLegacy(contentNode, startIndex) {
   if (contentNode && contentNode.length > 0) {
     // for (let i = 0; i < contentNode.childNodes.length;) {
     //   clearTextSelection();
@@ -378,21 +416,11 @@ async function startNodeReading(contentNode, startIndex) {
     // }
     let i = startIndex ? startIndex : 0
     for (; i < contentNode.length;) {
-      let range = new Range();
-      clearTextSelection();
+           
       if (audioMeta.isSpeaking) {
         audioMeta.currentPara = i;
-        range.setStart(contentNode[i], 0);
-        let endNode = i + audioMeta.readingLines;
-        i = i + audioMeta.readingLines;
-        if (endNode > contentNode.length) {
-          endNode = contentNode.length - 1
-        }
-        range.setEnd(contentNode[endNode], getChildNodeLenght(contentNode[endNode]));
-        i++
-        document.getSelection().addRange(range);
-        await startReading(range.toString())
-        if (endNode == contentNode.length - 1) {
+        await startReading(contentNode[i])
+        if (i == contentNode.length - 1) {
           openPageForReading('NEXT')
         }
       } else {
@@ -405,20 +433,26 @@ async function startNodeReading(contentNode, startIndex) {
 
   }
 }
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+function readFlippedPage(){
+  let locSpreadMode = PDFViewerApplication.pdfViewer.spreadMode;
+    
+  if (locSpreadMode <= 0) {
+    audioMeta.itemsToRead = []
+    audioMeta.totalReadItems = 0;
+    audioMeta.currentPara = 0;
+    setTimeout(1000,selectRangeForReading())
+  } 
+}
 function openPageForReading(directionType) {
   if (PDFViewerApplication) {
-    let locSpreadMode = PDFViewerApplication.pdfViewer.spreadMode;
     let count = 0;
-    PDFViewerApplication.eventBus._on("pagerender", evt => {
-      if (locSpreadMode <= 0) {
-        selectRangeForReading()
-      } else {
-        if (count === locSpreadMode) {
-          selectRangeForReading()
-        }
-        count++;
-      }
-    });
+    audioMeta.isSpeaking = false;
+    PDFViewerApplication.eventBus._off("pagechanging",readFlippedPage);
+    PDFViewerApplication.eventBus._on("pagechanging", readFlippedPage );
     if (directionType === 'PREV')
       openPrevPage()
     else
@@ -444,7 +478,7 @@ async function startReading(paramText) {
     // msg.voice = audioMeta.voices[10]; // Note: some voices don't support altering params
     //msg.voiceURI = 'native';
     msg.volume = 1; // 0 to 1
-    msg.rate = 1; // 0.1 to 10
+    msg.rate = 0.95; // 0.1 to 10
     msg.pitch = 1; //0 to 2
 
     let str = paramText.replace(/\*/g, '');
@@ -453,6 +487,8 @@ async function startReading(paramText) {
     synth.speak(msg);
     return new Promise(resolve => {
       msg.onend = resolve;
+      msg.onerror = resolve;
+      msg.onpause = resolve;
     });
 
 
@@ -464,7 +500,24 @@ function setVoices() {
     timer = setInterval(function () {
       audioMeta.voices = synth.getVoices();
       console.log(audioMeta.voices);
+      let lang_hint1 = "English"
+      let lang_hint2 = "India"
+      let lang_set = null;
+      if (PDFViewerApplication.baseUrl.includes("/HI/")){
+        lang_hint1 = " हिन्दी"
+        lang_hint2 = "हिन्दी"
+
+      }
+      if (PDFViewerApplication.baseUrl.includes("/EN/")){
+        lang_hint1 = "English"
+        lang_hint2 = "India"
+      }
+
       $.each(audioMeta.voices, function (index, voice) {
+        if (voice.name.includes(lang_hint1) || ( voice.name.includes(lang_hint2)))
+        {
+          lang_set = index
+        }
         $('#selectVoices').append(
           $('<option></option>').val(index).html(voice.name)
         );
@@ -473,12 +526,160 @@ function setVoices() {
         assignSelectedAudioFromStore()
         if (timer) clearInterval(timer);
       }
+      if (lang_set){
+        $("#selectVoices").val(lang_set)
+        msg.voice = audioMeta.voices[lang_set]
+        msg.lang = msg.voice.lang;
+      }
     }, 2000);
   } catch (err) {
     if (timer) clearInterval(timer);
   }
 }
-async function selectRangeForReading() {
+async function startNodeReading(contentNode, startIndex) {
+  if (contentNode && contentNode.length > 0) {
+    // for (let i = 0; i < contentNode.childNodes.length;) {
+    //   clearTextSelection();
+    //   let range = new Range();
+    //   range.setStart(contentNode, i);
+    //   let endNode=i + 5;
+    //   i=i+5;
+    //   if(endNode > contentNode.childNodes.length)
+    //   {
+    //     endNode= contentNode.childNodes.length
+    //   }
+    //  range.setEnd(contentNode, endNode);
+    //  document.getSelection().addRange(range);
+    //  await startReading(range,msg)
+    // }
+    let i = startIndex ? startIndex : 0
+    for (; i < contentNode.length;) {
+      
+      
+      if (audioMeta.isSpeaking) {
+        audioMeta.currentPara = i;
+        
+        var toRead = contentNode[i];
+        currentReadIndex = i;
+        PDFViewerApplication.eventBus.dispatch("find", {
+            source: this,
+            type:" ",
+            query: toRead,
+            caseSensitive: true,
+            entireWord: true,
+            highlightAll: true,
+            findPrevious: false,
+            matchDiacritics: true,
+          });
+        await startReading(toRead)
+        
+        if (i == contentNode.length - 1) {
+          setTimeout(openPageForReading('NEXT'), 2000);
+        }
+        i++;
+      } else {
+        break;
+      }
+    }
+    return new Promise((resolve, reject) => {
+      resolve("done");
+    });
+
+  }
+}
+async function selectRangeForReading()
+{
+  if (audioMeta.isSpeaking) {
+    stopReading();
+    setPlayIcon()
+    PDFViewerApplication.eventBus._off("pagechanging",readFlippedPage);
+    return;
+  }
+  PDFViewerApplication.eventBus._off("pagechanging",readFlippedPage);
+  PDFViewerApplication.eventBus._on("pagechanging", readFlippedPage );
+
+  if (audioMeta.itemsToRead.length > 0){
+    audioMeta.isSpeaking = !audioMeta.isSpeaking;
+    setPlayIcon()
+    startNodeReading(audioMeta.itemsToRead, audioMeta.currentPara)
+    return
+  }
+  const textOptions = { disableNormalization: true };
+  return new Promise(() => {
+
+    setTimeout(hideVoicePanel, 15000)
+
+    PDFViewerApplication.pdfDocument.getPage(PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber)
+    .then(pdfPage => {
+      return pdfPage.getTextContent(textOptions);
+    }).then(
+      textContent => {
+        return new Promise(() => {
+          const strBuf = [];
+          
+
+          for (const textItem of textContent.items) {
+            var final_str = textItem.str ;
+
+            //convert the encodings, take hint from the truefont
+            if(textItem.trueFont && (textItem.trueFont.includes("Kruti"))) {
+              final_str = kruti2unicodeEx(final_str);
+            }
+            else if(textItem.trueFont && ( textItem.trueFont.includes("Chanakya"))) {
+              final_str = chanakya2unicodeEx(final_str);
+            }
+            if(textItem.transform[5] < 600)
+              strBuf.push(final_str);
+            if (textItem.hasEOL) {
+              strBuf.push(" ");
+            }
+          } 
+          const regex = new RegExp("(?<!\\w\\.\\w\.)"
+                          +"(?<!\\s\\p{Lu}\\p{L}\.)"
+                         +"(?<!\\s\\p{L}\.)"
+                         +"(?<!\\s\\p{N}\\p{N}\.)"
+                         +"(?<!\\s\\p{Lu}\\p{L}\\p{L}\.)"
+                        +"(?<=\\.|\\?|।|\\\\'|\"|’|\!|”|,|;|—|\\\\:|;)\\s", 'gmu')
+
+          var textArr = strBuf.join("").split(regex);
+
+          audioMeta.currentPara = 0
+          if (textArr && textArr.length > 0) {
+            audioMeta.isSpeaking = true;
+            setPlayIcon()
+            {
+              audioMeta.itemsToRead = textArr;
+              audioMeta.totalReadItems = textArr.length;
+              startNodeReading(audioMeta.itemsToRead, audioMeta.currentPara)
+            }
+        
+          } else {
+            audioMeta.currentPara = 0
+            setTimeout(openPageForReading('NEXT'), 1000);
+          }
+          
+          
+        });
+      },
+      reason => {
+          console.error(
+            `Unable to get text content for page ${PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber}`,
+            reason
+          );
+          // Page error -- assuming no text content. TODO clean array
+          
+        }
+    );
+    
+
+  });
+
+
+
+
+}
+
+async function selectRangeForReadingLegacy() {
   setTimeout(hideVoicePanel, 5000)
   let markedContent = document.getElementsByClassName("markedContent");
   let textLayer = document.getElementsByClassName("textLayer");
@@ -511,17 +712,17 @@ async function selectRangeForReading() {
 
 }
 function nextParagraph() {
-  setTimeout(hideVoicePanel, 5000)
-  let textArr = document.querySelectorAll("[role='presentation']");
-  if (textArr && textArr.length > 0) {
-    let nextParaIndex = audioMeta.currentPara + audioMeta.readingLines;
-    if (nextParaIndex > textArr.length) {
+  setTimeout(hideVoicePanel, 15000)
+  
+  if ( audioMeta.totalReadItems > 0) {
+    let nextParaIndex = audioMeta.currentPara+1;
+    if (nextParaIndex > audioMeta.totalReadItems) {
       openPageForReading('NEXT')
     } else {
       stopReading();
       audioMeta.isSpeaking = true;
       setPlayIcon()
-      startNodeReading(textArr, nextParaIndex)
+      startNodeReading(audioMeta.itemsToRead, nextParaIndex)
     }
   } else {
     openPageForReading('NEXT')
@@ -529,20 +730,19 @@ function nextParagraph() {
 
 }
 function prevParagraph() {
-  setTimeout(hideVoicePanel, 5000)
-  let textArr = document.querySelectorAll("[role='presentation']");
-  if (textArr && textArr.length > 0) {
-    let prevParaIndex = audioMeta.currentPara - audioMeta.readingLines;
-    if (prevParaIndex < 0) {
+  setTimeout(hideVoicePanel, 15000)
+  if ( audioMeta.totalReadItems > 0) {
+    let prevParaIndex = audioMeta.currentPara+1;
+    if (prevParaIndex < 1) {
       openPageForReading('PREV')
     } else {
       stopReading();
       audioMeta.isSpeaking = true;
       setPlayIcon()
-      startNodeReading(textArr, prevParaIndex)
+      startNodeReading(audioMeta.itemsToRead, prevParaIndex)
     }
   } else {
-    openPageForReading("PREV")
+    openPageForReading('PREV')
   }
 
 }
@@ -618,9 +818,16 @@ function hideVoicePanel() {
 
 //postMessage Events start
 function loadSearchPage() {
+  if (flexi_isFullscreen){
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+  }
+
   window.parent.postMessage(JSON.stringify({
     action: "loadSearchPage"
   }), "*");
+
 }
 function loadNotesPage() {
   window.parent.postMessage(JSON.stringify({

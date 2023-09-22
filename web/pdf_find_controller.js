@@ -20,6 +20,8 @@
 import { binarySearchFirstItem, scrollIntoView } from "./ui_utils.js";
 import { getCharacterType, getNormalizeWithNFKC } from "./pdf_find_utils.js";
 import { PromiseCapability } from "pdfjs-lib";
+import {kruti2unicode,chanakya2unicode} from '../src/display/krutidev2unicode.js';
+
 
 const FindState = {
   FOUND: 0,
@@ -865,7 +867,15 @@ class PDFFindController {
               const strBuf = [];
 
               for (const textItem of textContent.items) {
-                strBuf.push(textItem.str);
+                var final_str = textItem.str ;
+                //convert the encodings, take hint from the truefont
+                if(textItem.trueFont && (textItem.trueFont.includes("Kruti"))) {
+                  final_str = kruti2unicode(final_str);
+                }
+                else if(textItem.trueFont && ( textItem.trueFont.includes("Chanakya"))) {
+                  final_str = chanakya2unicode(final_str);
+                }
+                strBuf.push(final_str);
                 if (textItem.hasEOL) {
                   strBuf.push("\n");
                 }

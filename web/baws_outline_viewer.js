@@ -272,9 +272,17 @@ class BAWSOutlineViewer extends BaseTreeViewer {
     }
     //TODO just for safety let's keep desthash as BAWS.Level.PageNumber 
 
+    let targetNode = null;
+    let page = this._currentPageNumber;
+    do{
 
-    this._scrollToCurrentTreeItem(this.page2element[this._currentPageNumber].parentNode);
-    
+      targetNode = this.page2element[page];
+      page--;
+
+    } while (targetNode == null && (page > 0)  )
+    if (targetNode){
+      this._scrollToCurrentTreeItem(targetNode.parentNode);
+    }
     
   }
 

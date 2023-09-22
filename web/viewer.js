@@ -19,6 +19,8 @@ import { RenderingStates, ScrollMode, SpreadMode } from "./ui_utils.js";
 import { AppOptions } from "./app_options.js";
 import { LinkTarget } from "./pdf_link_service.js";
 import { PDFViewerApplication } from "./app.js";
+import {kruti2unicode,chanakya2unicode} from '../src/display/krutidev2unicode.js';
+
 
 /* eslint-disable-next-line no-unused-vars */
 const pdfjsVersion =
@@ -173,6 +175,18 @@ function getViewerConfiguration() {
     debuggerScriptPath: "./debugger.js",
   };
 }
+function kruti2unicodeEx(str)
+{
+  return kruti2unicode(str)
+}
+window.kruti2unicodeEx  = kruti2unicodeEx
+
+function chanakya2unicodeEx(str){
+
+  return chanakya2unicode(str)
+
+}
+window.chanakya2unicodeEx = chanakya2unicodeEx
 
 function webViewerLoad() {
   const config = getViewerConfiguration();
@@ -220,4 +234,7 @@ export {
   PDFViewerApplication,
   AppConstants as PDFViewerApplicationConstants,
   AppOptions as PDFViewerApplicationOptions,
+  kruti2unicodeEx,
+  chanakya2unicodeEx,
 };
+

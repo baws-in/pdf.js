@@ -962,7 +962,8 @@ function appendText(task, geom, styles) {
 
   // Keeps screen readers from pausing on every new text span.
   textDiv.setAttribute("role", "presentation");
-  
+  textDiv.textContent = geom.str;
+  /*
   //convert the encodings, take hint from the truefont
   if(geom.trueFont && (geom.trueFont.includes("Kruti"))) {
     textDiv.textContent = kruti2unicode(geom.str);
@@ -976,7 +977,7 @@ function appendText(task, geom, styles) {
   else {
     textDiv.textContent = geom.str;
   }
-  
+  */
   // geom.dir may be 'ttb' for vertical texts.
   textDiv.dir = geom.dir;
 
@@ -1160,6 +1161,17 @@ class TextLayerRenderTask {
         }
         continue;
       }
+      //convert the encodings, take hint from the truefont
+      if(item.trueFont && (item.trueFont.includes("Kruti"))) {
+        item.str = kruti2unicode(item.str);
+      }
+      else if(item.trueFont && ( item.trueFont.includes("Chanakya"))) {
+        item.str = chanakya2unicode(item.str);
+      }	
+      else if (item.trueFont && (item.trueFont.includes("+TT")|| item.trueFont.includes("Nudi"))){
+        textDiv.textContent = kn_ascii2unicode(geom.str);
+      }
+     
       this._textContentItemsStr.push(item.str);
       appendText(this, item, styleCache);
     }
