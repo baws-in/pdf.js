@@ -195,10 +195,10 @@ const requestWakeLock = async () => {
       wakeLock = await navigator.wakeLock.request('screen');
       wakeLock.addEventListener('release', () => {
         console.log('Screen Wake Lock released:', wakeLock.released);
-        genericShowPanel('Screen Wake Lock released:'+ wakeLock.released, 2000);
+        //genericShowPanel('Screen Wake Lock released:'+ wakeLock.released, 2000);
       });
       console.log('Screen Wake Lock released:', wakeLock.released);
-      genericShowPanel('Screen Wake Lock released:'+ wakeLock.released, 2000);
+      //genericShowPanel('Screen Wake Lock released:'+ wakeLock.released, 2000);
     } catch (err) {
       console.error(`${err.name}, ${err.message}`);
     }
@@ -478,17 +478,31 @@ async function startReading(paramText) {
     // msg.voice = audioMeta.voices[10]; // Note: some voices don't support altering params
     //msg.voiceURI = 'native';
     msg.volume = 1; // 0 to 1
-    msg.rate = 0.95; // 0.1 to 10
+    msg.rate = 0.90; // 0.1 to 10
     msg.pitch = 1; //0 to 2
 
     let str = paramText.replace(/\*/g, '');
     msg.text = str;
     //msg.lang = 'en-US';
     synth.speak(msg);
+    let r = setInterval(() => {
+      console.log(synth.speaking);
+      if (!synth.speaking) {
+        clearInterval(r);
+      } else {
+        synth.pause();
+        synth.resume();
+        clearInterval(r); //we shouldnt need more than one 13 sec pauses.
+      }
+    }, 13000);
     return new Promise(resolve => {
-      msg.onend = resolve;
-      msg.onerror = resolve;
-      msg.onpause = resolve;
+      msg.onend = function (event){
+        clearInterval(r);
+        resolve();
+      };
+      msg.onerror = msg.onend;
+      
+      
     });
 
 
@@ -503,32 +517,46 @@ function setVoices() {
       let lang_hint1 = "English"
       let lang_hint2 = "India"
       let lang_set = null;
+      let lang_set_backup = null;
       if (PDFViewerApplication.baseUrl.includes("/HI/")){
         lang_hint1 = " हिन्दी"
-        lang_hint2 = "हिन्दी"
+        lang_hint2 = "Hindi"
 
       }
       if (PDFViewerApplication.baseUrl.includes("/EN/")){
         lang_hint1 = "English"
         lang_hint2 = "India"
       }
-
+      
       $.each(audioMeta.voices, function (index, voice) {
-        if (voice.name.includes(lang_hint1) || ( voice.name.includes(lang_hint2)))
+        if (voice.name.includes(lang_hint1) && ( voice.name.includes(lang_hint2)))
         {
           lang_set = index
+        }
+        if (voice.name.includes(lang_hint1))
+        {
+          lang_set_backup = index
+        }
+        if (voice.name.includes(lang_hint2))
+        {
+          lang_set_backup = index
         }
         $('#selectVoices').append(
           $('<option></option>').val(index).html(voice.name)
         );
       });
-      if (audioMeta.voices.length !== 0) {
-        assignSelectedAudioFromStore()
+      if (audioMeta.voices.length !== 0 ) {
+        //assignSelectedAudioFromStore()
         if (timer) clearInterval(timer);
       }
       if (lang_set){
         $("#selectVoices").val(lang_set)
         msg.voice = audioMeta.voices[lang_set]
+        msg.lang = msg.voice.lang;
+      }
+      else if (lang_set_backup){
+        $("#selectVoices").val(lang_set_backup)
+        msg.voice = audioMeta.voices[lang_set_backup]
         msg.lang = msg.voice.lang;
       }
     }, 2000);
@@ -587,6 +615,24 @@ async function startNodeReading(contentNode, startIndex) {
 
   }
 }
+function compareItems( a, b ) {
+  if ( (a.transform[5] - b.transform[5]) < -1 ){
+    return 1;
+  }
+  if ( (a.transform[5] - b.transform[5]) > 1 ){
+    return -1;
+  }
+  if ( a.transform[4] < b.transform[4] ){
+    return -1;
+  }
+  if ( a.transform[4] > b.transform[4] ){
+    return 1;
+  }
+
+  return 0;
+}
+
+objs.sort( compare );
 async function selectRangeForReading()
 {
   if (audioMeta.isSpeaking) {
@@ -617,10 +663,16 @@ async function selectRangeForReading()
         return new Promise(() => {
           const strBuf = [];
           
-
+          textContent.items.sort(compareItems);
+          let prevItem = null;
           for (const textItem of textContent.items) {
             var final_str = textItem.str ;
-
+            if (prevItem 
+              && prevItem.str == textItem.str
+              && (Math.abs(prevItem.transform[4]-textItem.transform[4]) < 1)
+              && (Math.abs(prevItem.transform[5]-textItem.transform[5]) < 1)
+              ) continue;
+            
             //convert the encodings, take hint from the truefont
             if(textItem.trueFont && (textItem.trueFont.includes("Kruti"))) {
               final_str = kruti2unicodeEx(final_str);
@@ -628,11 +680,16 @@ async function selectRangeForReading()
             else if(textItem.trueFont && ( textItem.trueFont.includes("Chanakya"))) {
               final_str = chanakya2unicodeEx(final_str);
             }
-            if(textItem.transform[5] < 600)
+            var ignore_height = 600
+            if (PDFViewerApplication.baseUrl.includes("/MR/")){
+              ignore_height = 860
+            }
+            if(textItem.transform[5] < ignore_height)
               strBuf.push(final_str);
             if (textItem.hasEOL) {
               strBuf.push(" ");
             }
+            prevItem = textItem;
           } 
           const regex = new RegExp("(?<!\\w\\.\\w\.)"
                           +"(?<!\\s\\p{Lu}\\p{L}\.)"
@@ -732,7 +789,7 @@ function nextParagraph() {
 function prevParagraph() {
   setTimeout(hideVoicePanel, 15000)
   if ( audioMeta.totalReadItems > 0) {
-    let prevParaIndex = audioMeta.currentPara+1;
+    let prevParaIndex = audioMeta.currentPara-1;
     if (prevParaIndex < 1) {
       openPageForReading('PREV')
     } else {
