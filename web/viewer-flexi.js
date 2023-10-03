@@ -9,7 +9,7 @@ var scrolllerWatch;
 if ('speechSynthesis' in window ) {
   var msg = new SpeechSynthesisUtterance();
   var synth = window.speechSynthesis;
-  var audioMeta = { voices: null, isSpeaking: false, currentPara: 0 , totalReadItems:0, itemsToRead: [] }
+  var audioMeta = { voices: null,keepAlive: null, isSpeaking: false, currentPara: 0 , totalReadItems:0, itemsToRead: [], currentPage: 0 }
   setVoices()
 }
 
@@ -125,13 +125,17 @@ $(document).ready(function () {
   }
   function loadPdfApp() {
     scondsCount++;
-    if (PDFViewerApplication) {
-      PDFViewerApplication.eventBus._on("pagesloaded", evt => {
+    if (PDFViewerApplication && PDFViewerApplication.eventBus) {
+        isBookLoaded = true
+        postBawsMsg("pageChanged");
+        this._isPagesLoaded = true;
+        console.log(synth)
+      /*PDFViewerApplication.eventBus._on("pagesloaded", evt => {
         isBookLoaded = true
         postBawsMsg("pageChanged");
         this._isPagesLoaded = !!evt.pagesCount;
         console.log(synth)
-      });
+      });*/
       PDFViewerApplication.eventBus._on("pagechanging", evt => {
         isBookLoaded = true;
         if (evt.pageNumber)
@@ -366,6 +370,7 @@ function openNextPage() {
   if (scrolllerWatch) {
     clearInterval(scrolllerWatch)
   }
+  audioMeta.isSpeaking = false;
   PDFViewerApplication.pdfViewer.nextPage();
   pageFlipTransform()
   //PDFViewerApplication.pdfViewer.scrollMode=3
@@ -386,6 +391,7 @@ function clearTransform() {
   viewContainer.style.transform = "none"
 }
 function openPrevPage() {
+  audioMeta.isSpeaking = false;
   if (scrolllerWatch) {
     clearInterval(scrolllerWatch)
   }
@@ -483,21 +489,12 @@ async function startReading(paramText) {
 
     let str = paramText.replace(/\*/g, '');
     msg.text = str;
+    console.log("Speaking "+ str)
     //msg.lang = 'en-US';
     synth.speak(msg);
-    let r = setInterval(() => {
-      console.log(synth.speaking);
-      if (!synth.speaking) {
-        clearInterval(r);
-      } else {
-        synth.pause();
-        synth.resume();
-        clearInterval(r); //we shouldnt need more than one 13 sec pauses.
-      }
-    }, 13000);
+
     return new Promise(resolve => {
       msg.onend = function (event){
-        clearInterval(r);
         resolve();
       };
       msg.onerror = msg.onend;
@@ -581,6 +578,7 @@ async function startNodeReading(contentNode, startIndex) {
     //  await startReading(range,msg)
     // }
     let i = startIndex ? startIndex : 0
+    var garbage_regex = /[\p{N}\p{L}]/u;
     for (; i < contentNode.length;) {
       
       
@@ -589,18 +587,20 @@ async function startNodeReading(contentNode, startIndex) {
         
         var toRead = contentNode[i];
         currentReadIndex = i;
-        PDFViewerApplication.eventBus.dispatch("find", {
-            source: this,
-            type:" ",
-            query: toRead,
-            caseSensitive: true,
-            entireWord: true,
-            highlightAll: true,
-            findPrevious: false,
-            matchDiacritics: true,
-          });
-        await startReading(toRead)
-        
+
+        if (toRead.match(garbage_regex)){
+          PDFViewerApplication.eventBus.dispatch("find", {
+              source: this,
+              type:" ",
+              query: toRead,
+              caseSensitive: true,
+              entireWord: true,
+              highlightAll: true,
+              findPrevious: false,
+              matchDiacritics: true,
+            });
+          await startReading(toRead)
+        }
         if (i == contentNode.length - 1) {
           setTimeout(openPageForReading('NEXT'), 2000);
         }
@@ -616,10 +616,10 @@ async function startNodeReading(contentNode, startIndex) {
   }
 }
 function compareItems( a, b ) {
-  if ( (a.transform[5] - b.transform[5]) < -1 ){
+  if ( (a.transform[5] - b.transform[5]) < -5 ){
     return 1;
   }
-  if ( (a.transform[5] - b.transform[5]) > 1 ){
+  if ( (a.transform[5] - b.transform[5]) > 5 ){
     return -1;
   }
   if ( a.transform[4] < b.transform[4] ){
@@ -632,7 +632,7 @@ function compareItems( a, b ) {
   return 0;
 }
 
-objs.sort( compare );
+
 async function selectRangeForReading()
 {
   if (audioMeta.isSpeaking) {
@@ -644,7 +644,8 @@ async function selectRangeForReading()
   PDFViewerApplication.eventBus._off("pagechanging",readFlippedPage);
   PDFViewerApplication.eventBus._on("pagechanging", readFlippedPage );
 
-  if (audioMeta.itemsToRead.length > 0){
+  if (audioMeta.itemsToRead.length > 0 && 
+    audioMeta.currentPage == PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber){
     audioMeta.isSpeaking = !audioMeta.isSpeaking;
     setPlayIcon()
     startNodeReading(audioMeta.itemsToRead, audioMeta.currentPara)
@@ -665,6 +666,8 @@ async function selectRangeForReading()
           
           textContent.items.sort(compareItems);
           let prevItem = null;
+          let prevHeight = 0;
+          
           for (const textItem of textContent.items) {
             var final_str = textItem.str ;
             if (prevItem 
@@ -684,10 +687,19 @@ async function selectRangeForReading()
             if (PDFViewerApplication.baseUrl.includes("/MR/")){
               ignore_height = 860
             }
+            if (Math.abs(textItem.height-prevHeight) > 1 
+                && textItem.height > 0)
+            { 
+              strBuf.push("\n ")
+            }
             if(textItem.transform[5] < ignore_height)
               strBuf.push(final_str);
             if (textItem.hasEOL) {
               strBuf.push(" ");
+            }
+            if (textItem.height > 0 ) 
+            {
+              prevHeight = textItem.height
             }
             prevItem = textItem;
           } 
@@ -696,11 +708,12 @@ async function selectRangeForReading()
                          +"(?<!\\s\\p{L}\.)"
                          +"(?<!\\s\\p{N}\\p{N}\.)"
                          +"(?<!\\s\\p{Lu}\\p{L}\\p{L}\.)"
-                        +"(?<=\\.|\\?|।|\\\\'|\"|’|\!|”|,|;|—|\\\\:|;)\\s", 'gmu')
+                        +"(?<=\\.|\\?|।|\\\\'|\"|’|\!|”|,|;|—|\\\\:|\\\\;|-|\\n)\\s", 'gmu')
 
           var textArr = strBuf.join("").split(regex);
 
-          audioMeta.currentPara = 0
+          audioMeta.currentPara = 0;
+          audioMeta.currentPage = PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber;
           if (textArr && textArr.length > 0) {
             audioMeta.isSpeaking = true;
             setPlayIcon()
@@ -837,8 +850,13 @@ function setPlayIcon() {
   $("#audioPlayIcon").removeClass()
   if (audioMeta.isSpeaking) {
     $("#audioPlayIcon").addClass("far fa-stop fa-3x")
+    audioMeta.keepAlive = setInterval(() => {
+        synth.pause();
+        synth.resume();
+    }, 13000);
   } else {
     $("#audioPlayIcon").addClass("far fa-play fa-3x")
+    if (audioMeta.keepAlive) clearInterval(audioMeta.keepAlive);
   }
 }
 function hideVoicePanel() {
