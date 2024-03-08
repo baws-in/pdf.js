@@ -450,6 +450,9 @@ function readFlippedPage(){
     audioMeta.itemsToRead = []
     audioMeta.totalReadItems = 0;
     audioMeta.currentPara = 0;
+    //make it appear like play on new page
+    stopReading();
+    setPlayIcon()
     setTimeout(1000,selectRangeForReading())
   } 
 }
@@ -484,7 +487,7 @@ async function startReading(paramText) {
     // msg.voice = audioMeta.voices[10]; // Note: some voices don't support altering params
     //msg.voiceURI = 'native';
     msg.volume = 1; // 0 to 1
-    msg.rate = 0.90; // 0.1 to 10
+    msg.rate = 0.95; // 0.1 to 10
     msg.pitch = 1; //0 to 2
 
     let str = paramText.replace(/\*/g, '');
@@ -687,7 +690,7 @@ async function selectRangeForReading()
             if (PDFViewerApplication.baseUrl.includes("/MR/")){
               ignore_height = 860
             }
-            if (Math.abs(textItem.height-prevHeight) > 1 
+            if (Math.abs(textItem.height-prevHeight) >= 1 
                 && textItem.height > 0)
             { 
               strBuf.push("\n ")
@@ -790,6 +793,7 @@ function nextParagraph() {
       openPageForReading('NEXT')
     } else {
       stopReading();
+      setPlayIcon()
       audioMeta.isSpeaking = true;
       setPlayIcon()
       startNodeReading(audioMeta.itemsToRead, nextParaIndex)
@@ -807,6 +811,7 @@ function prevParagraph() {
       openPageForReading('PREV')
     } else {
       stopReading();
+      setPlayIcon()
       audioMeta.isSpeaking = true;
       setPlayIcon()
       startNodeReading(audioMeta.itemsToRead, prevParaIndex)
@@ -856,7 +861,11 @@ function setPlayIcon() {
     }, 13000);
   } else {
     $("#audioPlayIcon").addClass("far fa-play fa-3x")
-    if (audioMeta.keepAlive) clearInterval(audioMeta.keepAlive);
+    if (audioMeta.keepAlive) 
+    {  
+       clearInterval(audioMeta.keepAlive);
+       audioMeta.keepAlive = null; 
+    }
   }
 }
 function hideVoicePanel() {
