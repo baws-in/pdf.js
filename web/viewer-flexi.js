@@ -480,6 +480,77 @@ function stopReading() {
   console.log(synth.speaking)
 
 }
+
+
+var speechUtteranceChunker = function (utt, settings, callback) {
+  settings = settings || {};
+  var newUtt;
+  var txt = (settings && settings.offset !== undefined ? utt.text.substring(settings.offset) : utt.text);
+  if (utt.voice && utt.voice.voiceURI === 'native') { // Not part of the spec
+      newUtt = utt;
+      newUtt.text = txt;
+      newUtt.addEventListener('end', function () {
+          if (speechUtteranceChunker.cancel) {
+              speechUtteranceChunker.cancel = false;
+          }
+          if (callback !== undefined) {
+              callback();
+          }
+      });
+  }
+  else {
+      var chunkLength = (settings && settings.chunkLength) || 160;
+      var pattRegex = new RegExp('^[\\s\\S]{' + Math.floor(chunkLength / 2) + ',' + chunkLength + '}[$]{1}|^[\\s\\S]{1,' + chunkLength + '}$|^[\\s\\S]{1,' + chunkLength + '} ');
+      var chunkArr = txt.match(pattRegex);
+
+      if (chunkArr[0] === undefined || chunkArr[0].length <= 1) {
+          //call once all text has been spoken...
+          if (callback !== undefined) {
+              callback();
+          }
+          return;
+      }
+      var chunk = chunkArr[0];
+      newUtt = new SpeechSynthesisUtterance(chunk);
+      var x;
+      for (x in utt) {
+        if (utt.hasOwnProperty(x) && x !== 'text') {
+              newUtt[x] = utt[x];
+          }
+      }
+
+      newUtt.lang = utt.lang;
+      newUtt.voice = utt.voice;
+      newUtt.volume = utt.volume;
+      newUtt.pitch = utt.pitch;
+
+      newUtt.addEventListener('end', function () {
+          if (speechUtteranceChunker.cancel) {
+              speechUtteranceChunker.cancel = false;
+              return;
+          }
+          settings.offset = settings.offset || 0;
+          settings.offset += chunk.length - 1;
+          speechUtteranceChunker(utt, settings, callback);
+
+          // if (settings.offset >= utt.text.length -1){
+          //   newUtt.onend = callback;
+          // }
+          // else{
+          //   speechUtteranceChunker(utt, settings, callback);
+          // }
+      });
+  }
+
+  if (settings.modifier) {
+      settings.modifier(newUtt);
+  }
+  console.log(newUtt); //IMPORTANT!! Do not remove: Logging the object out fixes some onend firing issues.
+  //placing the speak invocation inside a callback fixes ordering and onend issues.
+  speechSynthesis.speak(newUtt);
+  
+};
+
 async function startReading(paramText) {
   if ('speechSynthesis' in window) {
     synth.cancel()
@@ -491,11 +562,31 @@ async function startReading(paramText) {
     msg.pitch = 1; //0 to 2
 
     let str = paramText.replace(/\*/g, '');
-    msg.text = str;
-    console.log("Speaking "+ str)
-    //msg.lang = 'en-US';
-    synth.speak(msg);
+    str = str.replace(/ Manusmriti /g, ' मनुस्मृति ');
+    str = str.replace(/ Smriti /g, ' स्मृति ');
+    str = str.replace(/ Shundras /g, ' Shoodras ');
+    str = str.replace(/ B.C. /g, ' BC ');
+    str = str.replace(/ A.D. /g, ' AD ');
+    str = str.replace(/ Dr. /g, ' doctor ');
+    str = str.replace(/ Mr. /g, ' mister ');
+    str = str.replace(/ pp. /g, ' page ');
+    str = str.replace(/ Mrs. /g, ' Missus ');
+    str = str.replace(/ Prof. /g, ' Professor ');
+    str = str.replace(/ i.e. /g, ' ,that is, ');
+    
 
+    msg.text = str;
+    console.log("Speaking: "+ str)
+    //msg.lang = 'en-US';
+    //synth.speak(msg);
+    speechUtteranceChunker(msg, {
+      chunkLength: 160
+    }, function () {
+        //some code to execute when done
+        msg.onend();
+        console.log('done');
+    });
+   
     return new Promise(resolve => {
       msg.onend = function (event){
         resolve();
@@ -856,8 +947,8 @@ function setPlayIcon() {
   if (audioMeta.isSpeaking) {
     $("#audioPlayIcon").addClass("far fa-stop fa-3x")
     audioMeta.keepAlive = setInterval(() => {
-        synth.pause();
-        synth.resume();
+        //synth.resume();
+        console.log("We no longer need this resume")
     }, 13000);
   } else {
     $("#audioPlayIcon").addClass("far fa-play fa-3x")
