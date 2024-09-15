@@ -1,5 +1,23 @@
 //import { PDFViewerApplication } from "./app";
 
+const switchMode = mode => {
+  const pdfViewerElement = document.getElementById("viewer");
+  const textViewerElement = document.getElementById("textView");
+
+  window.mode = mode;
+  if (mode === "text") {
+    pdfViewerElement.style.display = "none";
+    textViewerElement.style.display = "block";
+  } else {
+    pdfViewerElement.style.display = "block";
+    textViewerElement.style.display = "none";
+  }
+};
+
+// text | pdf
+window.VIEW_MODE = "text";
+window.switchMode = switchMode;
+
 var selectedText = "";
 var moreReadable = true;
 var isBookLoaded = false;
