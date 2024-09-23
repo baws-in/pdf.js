@@ -2251,6 +2251,7 @@ class PDFViewer {
       return;
     }
     for (const pageView of this._pages) {
+      pageView.reset();
       pageView.update(updateArgs);
     }
     if (this.#scaleTimeoutId !== null) {

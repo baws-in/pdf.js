@@ -6,16 +6,18 @@ const switchMode = mode => {
 
   window.mode = mode;
   if (mode === "text") {
-    pdfViewerElement.style.display = "none";
-    textViewerElement.style.display = "block";
+    //pdfViewerElement.style.display = "none";    
+    mode = "text";
   } else {
-    pdfViewerElement.style.display = "block";
-    textViewerElement.style.display = "none";
+    //pdfViewerElement.style.display = "block";
+    mode = "pdf";
   }
+  window.VIEW_MODE = mode;
+  PDFViewerApplication.pdfViewer.refresh();
 };
 
 // text | pdf
-window.VIEW_MODE = "text";
+window.VIEW_MODE = "pdf";
 window.switchMode = switchMode;
 
 var selectedText = "";

@@ -837,6 +837,60 @@ class PDFPageView {
 
     this.renderingState = RenderingStates.RUNNING;
 
+    if(window.VIEW_MODE == 'text'){
+      var fetch_url = PDFViewerApplication._downloadUrl.slice(0, -4)+"/"+ this.id+".md";
+      return new Promise((resolve, reject) => {
+        fetch(fetch_url)
+          .then(response => {
+            // Check if the response status is OK (status 200-299)
+            if (!response.ok) {
+                throw new Error(`Failed to fetch. Status: ${response.status} ${response.statusText}`);
+            }
+            div.setAttribute("data-loaded", true);
+            this.eventBus.dispatch("pagerender", {
+              source: this,
+              pageNumber: this.id,
+            });
+            return response.text();
+          })
+          .then(markdown => {
+            // Check if the markdown content is not empty
+            if (!markdown || markdown.trim() === "") {
+                throw new Error('The fetched file is empty.');
+            }
+          // Create a new div element
+          const contentDiv = document.createElement('div');
+          
+          // Convert the markdown content into HTML
+          const htmlContent = marked.parse(markdown);
+          contentDiv.innerHTML = htmlContent;
+          
+          // Apply the book-like styling to the div
+          contentDiv.classList.add('textView');
+          
+          // Append the new div to the parentDiv
+          div.appendChild(contentDiv);
+
+          this.eventBus.dispatch("pagerendered", {
+            source: this,
+            pageNumber: this.id,
+            cssTransform: true,
+            timestamp: performance.now(),
+            error: this.#renderError,
+          });
+          
+          this._resetZoomLayer(/* removeFromDOM = */ true);
+          this.renderingState = RenderingStates.FINISHED;
+          // Resolve the Promise indicating that parentDiv has been modified
+          resolve();
+        })
+        .catch(error => {
+            reject('Error fetching the file:', error);
+        });
+      
+      });
+    }
+
     // Wrap the canvas so that if it has a CSS transform for high DPI the
     // overflow will be hidden in Firefox.
     const canvasWrapper = document.createElement("div");

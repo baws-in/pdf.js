@@ -68,6 +68,19 @@
   z-index: 1;
 }
 
+.pdfViewer .textView {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: 'Georgia', serif;
+  line-height: 1.6;
+  text-align: justify;
+  background-color: #fdfcf0;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  border-radius: 5px;
+}
+
+
 .pdfViewer .page {
   direction: ltr;
   width: 816px;
