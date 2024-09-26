@@ -14,11 +14,13 @@ const switchMode = mode => {
   }
   window.VIEW_MODE = mode;
   PDFViewerApplication.pdfViewer.refresh();
+  PDFViewerApplication.pdfViewer.currentScaleValue = "page-actual";
 };
 
 // text | pdf
 window.VIEW_MODE = "pdf";
 window.switchMode = switchMode;
+
 
 var selectedText = "";
 var moreReadable = true;
@@ -146,7 +148,8 @@ $(document).ready(function () {
   function loadPdfApp() {
     scondsCount++;
     if (PDFViewerApplication && PDFViewerApplication.eventBus) {
-        isBookLoaded = true
+        isBookLoaded = true;
+        switchMode("text");
         postBawsMsg("pageChanged");
         this._isPagesLoaded = true;
         console.log(synth)

@@ -869,7 +869,7 @@ class PDFPageView {
           contentDiv.classList.add('textView');
           
           // Append the new div to the parentDiv
-          div.appendChild(contentDiv);
+          div.append(contentDiv);
 
           this.eventBus.dispatch("pagerendered", {
             source: this,
