@@ -14,7 +14,6 @@ const switchMode = mode => {
   }
   window.VIEW_MODE = mode;
   PDFViewerApplication.pdfViewer.refresh();
-  PDFViewerApplication.pdfViewer.currentScaleValue = "page-actual";
 };
 
 // text | pdf

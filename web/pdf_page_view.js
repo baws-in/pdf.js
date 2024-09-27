@@ -49,6 +49,7 @@ import { TextAccessibilityManager } from "./text_accessibility.js";
 import { TextHighlighter } from "./text_highlighter.js";
 import { TextLayerBuilder } from "./text_layer_builder.js";
 import { XfaLayerBuilder } from "./xfa_layer_builder.js";
+import { PDFViewer } from "./pdf_viewer.js";
 
 /**
  * @typedef {Object} PDFPageViewOptions
@@ -868,9 +869,16 @@ class PDFPageView {
           // Apply the book-like styling to the div
           contentDiv.classList.add('textView');
           
+          if (window.innerWidth < 600)
+          {
+            PDFViewerApplication.pdfViewer.viewer.
+            lastChild.style.width = "100%"
+          }
+
+          
           // Append the new div to the parentDiv
           div.append(contentDiv);
-
+                    
           this.eventBus.dispatch("pagerendered", {
             source: this,
             pageNumber: this.id,
