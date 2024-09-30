@@ -70,12 +70,19 @@
 
 .pdfViewer .textView {
   max-width: 800px;
+  min-height: 100%;
   margin: 0 auto;
   padding: 20px;
-  font-family: 'Georgia', serif;
-  line-height: 1.6;
+  background-color: #f5f5dc; /* A light beige color to resemble paper */
+  background-image: linear-gradient(rgba(255, 255, 255, 0.8) 1px, transparent 1px), 
+                    linear-gradient(90deg, rgba(255, 255, 255, 0.8) 1px, transparent 1px);
+  background-size: 2px 2px; /* Grid pattern to simulate paper texture */
+  padding: 20px;
+  border: 1px solid #d3d3d3; /* Light gray border for a subtle edge */
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Soft shadow for depth */
+  font-family: 'Georgia', serif; /* Serif font for a classic look */
+  line-height: 1.6; /* Increased line height for readability */
   text-align: justify;
-  background-color: #fdfcf0;
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
   border-radius: 5px;
 }

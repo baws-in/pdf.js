@@ -1,19 +1,30 @@
 //import { PDFViewerApplication } from "./app";
 
 const switchMode = mode => {
-  const pdfViewerElement = document.getElementById("viewer");
-  const textViewerElement = document.getElementById("textView");
+  const switchButton = document.getElementById("view-switch");
 
-  window.mode = mode;
   if (mode === "text") {
-    //pdfViewerElement.style.display = "none";    
-    mode = "text";
+    switchButton.innerHTML = "&#x1F4BB;"; //Laptop icon
   } else {
-    //pdfViewerElement.style.display = "block";
-    mode = "pdf";
+    switchButton.innerHTML = "&#x1F4F1;"; //Mobile icon
   }
   window.VIEW_MODE = mode;
+  //PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width';
   PDFViewerApplication.pdfViewer.refresh();
+};
+
+const toggleView = event =>{
+
+  const mode = window.VIEW_MODE;
+
+  if (mode === "text") {
+    switchMode("pdf");
+  } else {
+    //pdfViewerElement.style.display = "block";
+    switchMode("text");
+  }
+  
+
 };
 
 // text | pdf
@@ -146,9 +157,19 @@ $(document).ready(function () {
   }
   function loadPdfApp() {
     scondsCount++;
-    if (PDFViewerApplication && PDFViewerApplication.eventBus) {
+    if (PDFViewerApplication && PDFViewerApplication.eventBus
+      && PDFViewerApplication.initialized
+      && PDFViewerApplication.pdfViewer.onePageRendered ) {
+        clearTimeout(loadPdfTimeOut);
         isBookLoaded = true;
-        switchMode("text");
+        const { onePageRendered } = PDFViewerApplication.pdfViewer;
+        
+        onePageRendered.then(data => {
+          if(isOnMobile()){
+            document.getElementById("view-switch").style.display = "inline-block";
+          }
+        });
+        
         postBawsMsg("pageChanged");
         this._isPagesLoaded = true;
         console.log(synth)
@@ -176,7 +197,7 @@ $(document).ready(function () {
           span.style.right = position*1.1 + 'px';
         }
       });
-      clearTimeout(loadPdfTimeOut)
+      
     }
     else {
       if (scondsCount <= 10)

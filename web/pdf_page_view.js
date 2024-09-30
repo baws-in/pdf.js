@@ -280,6 +280,13 @@ class PDFPageView {
       /* mustFlip = */ true,
       /* mustRotate = */ false
     );
+    if (window.VIEW_MODE == 'text') {
+      const { style } = this.div;
+      style.width = "100%";
+      style.height = "100%"; 
+      this.div.innerHTML = "";
+      return;
+    }
   }
 
   setPdfPage(pdfPage) {
@@ -838,66 +845,72 @@ class PDFPageView {
 
     this.renderingState = RenderingStates.RUNNING;
 
-    if(window.VIEW_MODE == 'text'){
-      var fetch_url = PDFViewerApplication._downloadUrl.slice(0, -4)+"/"+ this.id+".md";
+    if (window.VIEW_MODE === 'text') {
+      const fetchUrl = `${PDFViewerApplication._downloadUrl.slice(0, -4)}/${this.id}.md`;
+  
       return new Promise((resolve, reject) => {
-        fetch(fetch_url)
-          .then(response => {
-            // Check if the response status is OK (status 200-299)
-            if (!response.ok) {
-                throw new Error(`Failed to fetch. Status: ${response.status} ${response.statusText}`);
-            }
-            div.setAttribute("data-loaded", true);
-            this.eventBus.dispatch("pagerender", {
-              source: this,
-              pageNumber: this.id,
-            });
-            return response.text();
-          })
-          .then(markdown => {
-            // Check if the markdown content is not empty
-            if (!markdown || markdown.trim() === "") {
-                throw new Error('The fetched file is empty.');
-            }
-          // Create a new div element
-          const contentDiv = document.createElement('div');
-          
-          // Convert the markdown content into HTML
-          const htmlContent = marked.parse(markdown);
-          contentDiv.innerHTML = htmlContent;
-          
-          // Apply the book-like styling to the div
-          contentDiv.classList.add('textView');
-          
-          if (window.innerWidth < 600)
-          {
-            PDFViewerApplication.pdfViewer.viewer.
-            lastChild.style.width = "100%"
-          }
-
-          
-          // Append the new div to the parentDiv
-          div.append(contentDiv);
-                    
-          this.eventBus.dispatch("pagerendered", {
-            source: this,
-            pageNumber: this.id,
-            cssTransform: true,
-            timestamp: performance.now(),
-            error: this.#renderError,
-          });
-          
-          this._resetZoomLayer(/* removeFromDOM = */ true);
-          this.renderingState = RenderingStates.FINISHED;
-          // Resolve the Promise indicating that parentDiv has been modified
-          resolve();
-        })
-        .catch(error => {
-            reject('Error fetching the file:', error);
-        });
-      
+          fetch(fetchUrl)
+              .then(response => {
+                  if (!response.ok) {
+                      throw new Error(`Failed to fetch. Status: ${response.status} ${response.statusText}`);
+                  }
+  
+                  div.setAttribute("data-loaded", true);
+                  this.eventBus.dispatch("pagerender", {
+                      source: this,
+                      pageNumber: this.id,
+                  });
+  
+                  return response.text();
+              })
+              .then(markdown => {
+                  if (!markdown.trim()) {
+                      throw new Error('The fetched file is empty.');
+                  }
+  
+                  // Create a new div element and convert markdown content into HTML
+                  const contentDiv = document.createElement('div');
+                  contentDiv.innerHTML = marked.parse(markdown);
+                  contentDiv.classList.add('textView');
+  
+                  const postRenderActions = () => {
+                      this.eventBus.dispatch("pagerendered", {
+                          source: this,
+                          pageNumber: this.id,
+                          cssTransform: true,
+                          timestamp: performance.now(),
+                          error: this.#renderError,
+                      });
+  
+                      this._resetZoomLayer(/* removeFromDOM = */ true);
+                      this.renderingState = RenderingStates.FINISHED;
+                      resolve(); // Resolve when rendering is complete
+                  };
+  
+                  // Use ResizeObserver if screen width is less than 600px
+                  if (window.innerWidth < 600) {
+                      const resizeObserver = new ResizeObserver(() => {
+                          setTimeout(() => {                          
+                            resizeObserver.disconnect();
+                            if(div.innerHTML == '')
+                              div.append(contentDiv);
+                            postRenderActions();
+                          }, 0); // 0ms delay ensures logging happens after the current event loop
+                          
+                      });
+  
+                      resizeObserver.observe(PDFViewerApplication.pdfViewer.viewer.lastChild);
+                      PDFViewerApplication.pdfViewer.viewer.lastChild.style.width = "100%";
+                  } else {
+                      if(div.innerHTML == '')
+                        div.append(contentDiv);
+                      postRenderActions();
+                  }
+              })
+              .catch(error => reject(`Error fetching the file: ${error.message}`));
       });
     }
+  
 
     // Wrap the canvas so that if it has a CSS transform for high DPI the
     // overflow will be hidden in Firefox.

@@ -978,6 +978,7 @@ function setLayerDimensions(
   mustFlip = false,
   mustRotate = true
 ) {
+
   if (viewport instanceof PageViewport) {
     const { pageWidth, pageHeight } = viewport.rawDims;
     const { style } = div;
