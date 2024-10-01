@@ -102,12 +102,6 @@ See https://github.com/adobe-type-tools/cmap-resources
 <!--#endif-->
 
     <script src="viewer-flexi.js"></script>
-    
-    <style>
-      #view-switch::before {
-        background-color: transparent;
-      }
-    </style>
   </head>
 
   <body tabindex="1">
@@ -391,7 +385,8 @@ See https://github.com/adobe-type-tools/cmap-resources
                     <span data-l10n-id="zoom_in_label">Zoom In</span>
                   </button>
                   <div class="splitToolbarButtonSeparator"></div>
-                  <button id="view-switch" class="toolbarButton" style="display: none;" title="Rearrange for Mobile" onclick="toggleView()"">&#x1F4F1;</button>
+                  <button id="view-switch" class="toolbarButton " style="display: none;" title="Rearrange for Mobile" onclick="toggleView()"">&#x1F4F1;</button>
+                  <i class="material-icons page_full_icon" onClick="fullScreen()">fullscreen</i>
                 </div>
                 <span id="scaleSelectContainer" class="dropdownToolbarButton">
                   <select id="scaleSelect" title="Zoom" tabindex="23" data-l10n-id="zoom">
@@ -422,7 +417,6 @@ See https://github.com/adobe-type-tools/cmap-resources
 
         <div id="viewerContainer" tabindex="0">
           <div id="viewer" class="pdfViewer"></div>
-          <i class="material-icons page_full_icon" style="font-size: 2em; color: blue" onClick="fullScreen()">fullscreen</i>
         </div>
 
       </div>

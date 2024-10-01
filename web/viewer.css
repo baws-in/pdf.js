@@ -1529,12 +1529,17 @@
 }
 
 .page_full_icon{
-  z-index: 12;
-  position: fixed;
-    top: 7%;
-    right: 1%;
-    transform: translate(-50%,-50%);
-    font-size: 2em; 
+ color: white;
+ opacity: 0.7;
+}
+
+#view-switch::before {
+  background-color: transparent;
+}
+
+.splitToolbarButton {
+  display: flex;
+  align-items: center;
 }
 
 @keyframes blinker {
