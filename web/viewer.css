@@ -1533,6 +1533,10 @@
  opacity: 0.7;
 }
 
+#view-switch {
+  width: auto;
+}
+
 #view-switch::before {
   background-color: transparent;
 }
