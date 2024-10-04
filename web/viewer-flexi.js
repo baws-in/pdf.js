@@ -4,9 +4,9 @@ const switchMode = mode => {
   const switchButton = document.getElementById("view-switch");
 
   if (mode === "text") {
-    switchButton.innerHTML = "&#x1F4BB;"; //Laptop icon
+    switchButton.innerHTML = "&#x1F4BB;&#x1F449;&#x1F4F1;"; //Laptop to Mobile icon
   } else {
-    switchButton.innerHTML = "&#x1F4F1;"; //Mobile icon
+    switchButton.innerHTML = "&#x1F4F1;&#x1F449;&#x1F4BB;"; //Mobile to Laptop icon
   }
   window.VIEW_MODE = mode;
   //PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width';
