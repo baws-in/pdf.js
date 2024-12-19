@@ -211,6 +211,7 @@ const PDFViewerApplication = {
   isInitialViewSet: false,
   downloadComplete: false,
   isViewerEmbedded: window.parent !== window,
+  outline: null,
   url: "",
   baseUrl: "",
   _downloadUrl: "",
@@ -1675,6 +1676,7 @@ const PDFViewerApplication = {
 
     console.log("Fetching outline data...");
     let jsondata = await getJSON(load_url)
+    this.outline = jsondata;
     return jsondata;
   },
   /**
