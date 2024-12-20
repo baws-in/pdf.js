@@ -1,6 +1,5 @@
 //import { PDFViewerApplication } from "./app";
 
-
 const switchMode = mode => {
   const switchButton = document.getElementById("view-switch");
 
@@ -341,16 +340,22 @@ function onBookClick() {
     console.log(PDFViewerApplication);
     console.log(window.location.origin);
     let strSelectedTest = window.getSelection().toString();
-    selectedText = strSelectedTest.replace(/(\r\n|\n|\r)/gm, " ");
+    var selectedText = strSelectedTest.replace(/(\r\n|\n|\r)/gm, " ");
     //disabled
     //clearTextSelection()
     //$('#textShareModal').modal('show')
 
-    let check_one_word = strSelectedTest.replace(/^[^a-z\d]*|[^a-z\d]*$/gi, "");
-    if (parent.dictionary && check_one_word.indexOf(" ") <= -1) {
+    let check_one_word = selectedText.replace(/^[^a-z\d]*|[^a-z\d]*$/gi, "");
+    if (
+      parent.dictionary &&
+      check_one_word.indexOf(" ") <= -1 &&
+      check_one_word.length >= 4
+    ) {
       let result = parent.dictionary(check_one_word);
       console.log(result);
-      showDictionary(result, check_one_word);
+      setTimeout(function () {
+        showDictionary(result, check_one_word);
+      }, 2000);
     }
   }
 }
@@ -1093,6 +1098,15 @@ function postBawsMsg(action) {
 }
 
 function showDictionary(result, searchText) {
+  if (
+    window &&
+    window.getSelection() &&
+    window.getSelection().toString().length > 4
+  ) {
+    var selectedText = window.getSelection().toString();
+    let check_one_word = selectedText.replace(/^[^a-z\d]*|[^a-z\d]*$/gi, "");
+    if (check_one_word.indexOf(" ") > 0) return;
+  }
   let panelBody = document.getElementById("dictionaryPanelBody");
   panelBody.innerHTML = "";
   if (result) {
@@ -1112,7 +1126,7 @@ function showDictionaryPanel() {
   var myOffcanvas = document.getElementById("dictionaryPanel");
   var bsOffcanvas = new bootstrap.Offcanvas(myOffcanvas);
   bsOffcanvas.show();
-  setTimeout(hideDictionaryPanel, 10000);
+  setTimeout(hideDictionaryPanel, 5000);
 }
 function hideDictionaryPanel() {
   var myOffcanvas = document.getElementById("dictionaryPanel");
@@ -1171,98 +1185,172 @@ function detectMobileOS() {
   return "Unknown";
 }
 
+function uuidv4() {
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+    (
+      +c ^
+      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (+c / 4)))
+    ).toString(16)
+  );
+}
+
 async function shareBookPageContent(selectedText, title, pageUrl) {
   try {
-      
-      // Get the HTML element to convert into an image
-      const bookPageElement = document.getElementById('viewerContainer');
+    // Get the HTML element to convert into an image
+    const bookPageElement = document.getElementById("viewerContainer");
 
-      if (!bookPageElement) {
-          console.log("The 'bookPage' element was not found on the page.");
-          return;
+    if (!bookPageElement) {
+      console.log("The 'bookPage' element was not found on the page.");
+      return;
+    }
+
+    var selection = window.getSelection();
+    // Highlight the selected text
+    const range = selection.getRangeAt(0);
+    const highlightSpans = [];
+
+    if (
+      range.startContainer === range.endContainer &&
+      range.startContainer.nodeType === Node.TEXT_NODE
+    ) {
+      // Case 1: Selection is within a single text node
+      const parent = range.startContainer.parentNode;
+      const startNode = range.startContainer;
+
+      const textBefore = startNode.textContent.slice(0, range.startOffset);
+      const selected = startNode.textContent.slice(
+        range.startOffset,
+        range.endOffset
+      );
+      const textAfter = startNode.textContent.slice(range.endOffset);
+
+      // Create spans for all portions of the text
+      let beforeSpan = null;
+
+      if (textBefore) {
+        beforeSpan = document.createElement("span");
+        beforeSpan.style.backgroundColor = parent.style.backgroundColor;
+        //copySpanContentAndStyles(parent,beforeSpan)
+        beforeSpan.textContent = textBefore;
+        parent.insertBefore(beforeSpan, startNode);
+        highlightSpans.push(beforeSpan);
       }
 
-      var selection = window.getSelection();
-      // Highlight the selected text
-      const range = selection.getRangeAt(0);
-      const highlightSpans = [];
-      const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT, {
-          acceptNode: (node) => range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
-      });
+      const highlightSpan = document.createElement("span");
+      //copySpanContentAndStyles(parent,highlightSpan);
+      highlightSpan.style.backgroundColor = "yellow";
+      highlightSpan.display = "inline-block";
+      if ("text" == window.VIEW_MODE) highlightSpan.style.color = "black";
+      else highlightSpan.style.color = "yellow";
+      highlightSpan.textContent = selected;
+      parent.insertBefore(
+        highlightSpan,
+        beforeSpan ? beforeSpan.nextSibling : startNode
+      );
+      highlightSpans.push(highlightSpan);
+
+      if (textAfter) {
+        const afterSpan = document.createElement("span");
+        //copySpanContentAndStyles(parent,afterSpan);
+        afterSpan.style.backgroundColor = "transparent";
+        afterSpan.textContent = textAfter;
+        parent.insertBefore(afterSpan, highlightSpan.nextSibling);
+        highlightSpans.push(afterSpan);
+      }
+
+      // Remove the original text node
+      parent.removeChild(startNode);
+    } else {
+      // Case 2: Selection spans multiple text nodes
+      const walker = document.createTreeWalker(
+        range.commonAncestorContainer,
+        NodeFilter.SHOW_TEXT,
+        {
+          acceptNode: node =>
+            range.intersectsNode(node)
+              ? NodeFilter.FILTER_ACCEPT
+              : NodeFilter.FILTER_REJECT,
+        }
+      );
 
       let currentNode;
       while ((currentNode = walker.nextNode())) {
-          const parent = currentNode.parentNode;
+        const parent = currentNode.parentNode;
 
-          // Split the text node if necessary to match the exact range
-          if (currentNode === range.startContainer && range.startOffset > 0) {
-              currentNode = currentNode.splitText(range.startOffset);
-          }
-          if (currentNode === range.endContainer && range.endOffset < currentNode.length) {
-              currentNode.splitText(range.endOffset);
-          }
+        // Split the text node if necessary
+        if (currentNode === range.startContainer && range.startOffset > 0) {
+          currentNode = currentNode.splitText(range.startOffset);
+        }
+        if (
+          currentNode === range.endContainer &&
+          range.endOffset < currentNode.length
+        ) {
+          currentNode.splitText(range.endOffset);
+        }
 
-          // Wrap the current node in a highlight span
-          const highlightSpan = document.createElement('span');
-          highlightSpan.style.backgroundColor = 'yellow'; // Only set the background color
-          if ("text" == window.VIEW_MODE)
-            highlightSpan.style.color = 'black';
-          else
-            highlightSpan.style.color = "transparent";
+        // Highlight the selected text node
+        const highlightSpan = document.createElement("span");
+        highlightSpan.style.backgroundColor = "yellow";
+        if ("text" == window.VIEW_MODE) highlightSpan.style.color = "black";
+        else highlightSpan.style.color = "transparent";
+        parent.replaceChild(highlightSpan, currentNode);
+        highlightSpan.appendChild(currentNode);
 
-          highlightSpan.style.padding = '0'; // Ensure no additional padding is added
-          highlightSpan.style.margin = '0'; // Maintain the original flow
-          highlightSpan.style.display = 'inline'; // Ensure inline styling for seamless integration
-          parent.replaceChild(highlightSpan, currentNode);
-          highlightSpan.appendChild(currentNode);
-          highlightSpans.push(highlightSpan);
+        highlightSpans.push(highlightSpan);
       }
+    }
 
-      // Convert the element to a canvas using html2canvas
-      const canvas = await html2canvas(bookPageElement);
-      const imageBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    // Convert the element to a canvas using html2canvas
+    const canvas = await html2canvas(bookPageElement, {
+      foreignObjectRendering: true,
+    });
+    const imageBlob = await new Promise(resolve =>
+      canvas.toBlob(resolve, "image/png")
+    );
 
-      // Cleanup: Remove the highlight spans and restore the original text
-      for (const span of highlightSpans) {
-          const parent = span.parentNode;
-          while (span.firstChild) {
-              parent.insertBefore(span.firstChild, span);
-          }
-          parent.removeChild(span);
+    // Cleanup: Remove the highlight spans and restore the original text
+    // Cleanup: Restore the original text content
+    for (const span of highlightSpans) {
+      const parent = span.parentNode;
+      while (span.firstChild) {
+        parent.insertBefore(span.firstChild, span);
       }
+      parent.removeChild(span);
+    }
 
-      if (!navigator.canShare || !navigator.canShare({ files: [new File([], "")] })) {
-          return;
-      }
+    if (
+      !navigator.canShare ||
+      !navigator.canShare({ files: [new File([], "")] })
+    ) {
+      return;
+    }
 
-      // Create a file object from the image blob
-      const imageFile = new File([imageBlob], "bookPage.png", { type: "image/png" });
+    // Create a file object from the image blob
+    const imageFile = new File([imageBlob], uuidv4() + ".png", {
+      type: "image/png",
+    });
 
-
-      // Share the content using the Web Share API
-      if (detectMobileOS() === "Android"){
-        await navigator.share({
-            title: title,
-            text: selectedText,
-            url: pageUrl,
-            files: [imageFile],
-        });
-      } else {
-        await navigator.share({
-          files: [imageFile],
+    // Share the content using the Web Share API
+    if (detectMobileOS() === "Android") {
+      await navigator.share({
+        title: title,
+        text: selectedText,
+        url: pageUrl,
+        files: [imageFile],
       });
-      }
-
-      
+    } else {
+      await navigator.share({
+        files: [imageFile],
+      });
+    }
   } catch (error) {
-      console.error("Error sharing content:", error);
+    console.error("Error sharing content:", error);
   }
   genericShowPanel(
     "Selected text and address to current page copied to clipboard, please paste to share",
     3000
   );
 }
-
 
 async function shareButtonClick() {
   if (window.getSelection() && window) {
@@ -1292,18 +1380,22 @@ async function shareButtonClick() {
       var outline = PDFViewerApplication.outline;
       var title = "From Dr Ambedkar's writings and speeches";
       if (outline) {
-        var titles = getParentTitles(outline,urlData.pageNo);
-        title = title[titles.length-1];
-        selectedText = "In " + titles.slice(1).join(">") + "\n\n" + selectedText;
+        var titles = getParentTitles(outline, urlData.pageNo);
+        title = title[titles.length - 1];
+        selectedText =
+          "In " + titles.slice(1).join(">") + "\n\n" + selectedText;
       }
 
-      var panelMessageForText = "Selected text and address to current page copied, please paste to share";
-      var panelMessageForUrl = "Address to current page copied, please paste to share";
+      var panelMessageForText =
+        "Selected text and address to current page copied, please paste to share";
+      var panelMessageForUrl =
+        "Address to current page copied, please paste to share";
 
-      if (detectMobileOS() === "Android"){
-        panelMessageForText = "Please wait while we prepare to share image and text together";
-        panelMessageForUrl = "Please wait while we prepare to share image and text together";
-
+      if (detectMobileOS() === "Android") {
+        panelMessageForText =
+          "Please wait while we prepare to share image and text together";
+        panelMessageForUrl =
+          "Please wait while we prepare to share image and text together";
       }
       if (
         window &&
@@ -1316,20 +1408,14 @@ async function shareButtonClick() {
           "\n\nto read more please go to " +
           shortUrl;
         navigator.clipboard.writeText(selectedText);
-        genericShowPanel(
-          panelMessageForText,
-          3000
-        );
+        genericShowPanel(panelMessageForText, 3000);
       } else {
         selectedText = shortUrl;
         navigator.clipboard.writeText(selectedText);
-        genericShowPanel(
-          panelMessageForUrl,
-          3000
-        );
+        genericShowPanel(panelMessageForUrl, 3000);
       }
-      
-      await shareBookPageContent(selectedText, "Babasaheb's Writings", shortUrl);
+
+      await shareBookPageContent(selectedText, title, shortUrl);
     }
   }
 }
