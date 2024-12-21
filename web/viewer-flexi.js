@@ -1194,12 +1194,12 @@ function uuidv4() {
   );
 }
 
-function getQRCode(urldata) {
+function getQRCode(urldata, size) {
   return new QRCodeStyling({
-    width: 90,
-    height: 90,
+    width: size,
+    height: size,
     type: "svg",
-    image: "https://baws.in/baws_logo.svg",
+    image: "https://baws.in/baws-qr-logo.svg",
     data: urldata,
     "margin": 0,
     dotsOptions: {
@@ -1212,7 +1212,7 @@ function getQRCode(urldata) {
     },
     imageOptions: {
       crossOrigin: "anonymous",
-      margin: 2,
+      margin: 0,
     },
   });
 }
@@ -1323,7 +1323,9 @@ async function shareBookPageContent(selectedText, title, pageUrl) {
         }
       }
     }
-    var qrCode = getQRCode(pageUrl);
+
+
+    var qrCode = getQRCode(pageUrl, bookPageElement.offsetHeight*0.08);
 
 
     // Convert the element to a canvas using html2canvas
@@ -1337,7 +1339,6 @@ async function shareBookPageContent(selectedText, title, pageUrl) {
         qrCodeElement.style.transform = "translateX(-50%)";
         qrCode.append(qrCodeElement);
         canvasWrapper.appendChild(qrCodeElement);
-        await sleep(1000);
       },
     });
     const imageBlob = await new Promise(resolve =>
