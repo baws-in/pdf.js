@@ -1194,115 +1194,151 @@ function uuidv4() {
   );
 }
 
+function getQRCode(urldata) {
+  return new QRCodeStyling({
+    width: 90,
+    height: 90,
+    type: "svg",
+    image: "https://baws.in/baws_logo.svg",
+    data: urldata,
+    "margin": 0,
+    dotsOptions: {
+      color: "#4267b2",
+      type: "extra-rounded",
+    },
+    "cornersSquareOptions": { "type": "extra-rounded", color: "#4267b2" },
+    backgroundOptions: {
+      color: "transparent",
+    },
+    imageOptions: {
+      crossOrigin: "anonymous",
+      margin: 2,
+    },
+  });
+}
+
 async function shareBookPageContent(selectedText, title, pageUrl) {
   try {
     // Get the HTML element to convert into an image
-    const bookPageElement = document.getElementById("viewerContainer");
+    var bookPageElement = document.getElementById("viewer");
 
     if (!bookPageElement) {
       console.log("The 'bookPage' element was not found on the page.");
       return;
     }
-
-    var selection = window.getSelection();
-    // Highlight the selected text
-    const range = selection.getRangeAt(0);
     const highlightSpans = [];
+    var selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      // Highlight the selected text
+      const range = selection.getRangeAt(0);
 
-    if (
-      range.startContainer === range.endContainer &&
-      range.startContainer.nodeType === Node.TEXT_NODE
-    ) {
-      // Case 1: Selection is within a single text node
-      const parent = range.startContainer.parentNode;
-      const startNode = range.startContainer;
+      if (
+        range.startContainer === range.endContainer &&
+        range.startContainer.nodeType === Node.TEXT_NODE
+      ) {
+        // Case 1: Selection is within a single text node
+        const parent = range.startContainer.parentNode;
+        const startNode = range.startContainer;
 
-      const textBefore = startNode.textContent.slice(0, range.startOffset);
-      const selected = startNode.textContent.slice(
-        range.startOffset,
-        range.endOffset
-      );
-      const textAfter = startNode.textContent.slice(range.endOffset);
+        const textBefore = startNode.textContent.slice(0, range.startOffset);
+        const selected = startNode.textContent.slice(
+          range.startOffset,
+          range.endOffset
+        );
+        const textAfter = startNode.textContent.slice(range.endOffset);
 
-      // Create spans for all portions of the text
-      let beforeSpan = null;
+        // Create spans for all portions of the text
+        let beforeSpan = null;
 
-      if (textBefore) {
-        beforeSpan = document.createElement("span");
-        beforeSpan.style.backgroundColor = parent.style.backgroundColor;
-        //copySpanContentAndStyles(parent,beforeSpan)
-        beforeSpan.textContent = textBefore;
-        parent.insertBefore(beforeSpan, startNode);
-        highlightSpans.push(beforeSpan);
-      }
-
-      const highlightSpan = document.createElement("span");
-      //copySpanContentAndStyles(parent,highlightSpan);
-      highlightSpan.style.backgroundColor = "yellow";
-      highlightSpan.display = "inline-block";
-      if ("text" == window.VIEW_MODE) highlightSpan.style.color = "black";
-      else highlightSpan.style.color = "yellow";
-      highlightSpan.textContent = selected;
-      parent.insertBefore(
-        highlightSpan,
-        beforeSpan ? beforeSpan.nextSibling : startNode
-      );
-      highlightSpans.push(highlightSpan);
-
-      if (textAfter) {
-        const afterSpan = document.createElement("span");
-        //copySpanContentAndStyles(parent,afterSpan);
-        afterSpan.style.backgroundColor = "transparent";
-        afterSpan.textContent = textAfter;
-        parent.insertBefore(afterSpan, highlightSpan.nextSibling);
-        highlightSpans.push(afterSpan);
-      }
-
-      // Remove the original text node
-      parent.removeChild(startNode);
-    } else {
-      // Case 2: Selection spans multiple text nodes
-      const walker = document.createTreeWalker(
-        range.commonAncestorContainer,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode: node =>
-            range.intersectsNode(node)
-              ? NodeFilter.FILTER_ACCEPT
-              : NodeFilter.FILTER_REJECT,
-        }
-      );
-
-      let currentNode;
-      while ((currentNode = walker.nextNode())) {
-        const parent = currentNode.parentNode;
-
-        // Split the text node if necessary
-        if (currentNode === range.startContainer && range.startOffset > 0) {
-          currentNode = currentNode.splitText(range.startOffset);
-        }
-        if (
-          currentNode === range.endContainer &&
-          range.endOffset < currentNode.length
-        ) {
-          currentNode.splitText(range.endOffset);
+        if (textBefore) {
+          beforeSpan = document.createElement("span");
+          beforeSpan.style.backgroundColor = parent.style.backgroundColor;
+          //copySpanContentAndStyles(parent,beforeSpan)
+          beforeSpan.textContent = textBefore;
+          parent.insertBefore(beforeSpan, startNode);
+          highlightSpans.push(beforeSpan);
         }
 
-        // Highlight the selected text node
         const highlightSpan = document.createElement("span");
+        //copySpanContentAndStyles(parent,highlightSpan);
         highlightSpan.style.backgroundColor = "yellow";
+        highlightSpan.display = "inline-block";
         if ("text" == window.VIEW_MODE) highlightSpan.style.color = "black";
-        else highlightSpan.style.color = "transparent";
-        parent.replaceChild(highlightSpan, currentNode);
-        highlightSpan.appendChild(currentNode);
-
+        else highlightSpan.style.color = "yellow";
+        highlightSpan.textContent = selected;
+        parent.insertBefore(
+          highlightSpan,
+          beforeSpan ? beforeSpan.nextSibling : startNode
+        );
         highlightSpans.push(highlightSpan);
+
+        if (textAfter) {
+          const afterSpan = document.createElement("span");
+          //copySpanContentAndStyles(parent,afterSpan);
+          afterSpan.style.backgroundColor = "transparent";
+          afterSpan.textContent = textAfter;
+          parent.insertBefore(afterSpan, highlightSpan.nextSibling);
+          highlightSpans.push(afterSpan);
+        }
+
+        // Remove the original text node
+        parent.removeChild(startNode);
+      } else {
+        // Case 2: Selection spans multiple text nodes
+        const walker = document.createTreeWalker(
+          range.commonAncestorContainer,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: node =>
+              range.intersectsNode(node)
+                ? NodeFilter.FILTER_ACCEPT
+                : NodeFilter.FILTER_REJECT,
+          }
+        );
+
+        let currentNode;
+        while ((currentNode = walker.nextNode())) {
+          const parent = currentNode.parentNode;
+
+          // Split the text node if necessary
+          if (currentNode === range.startContainer && range.startOffset > 0) {
+            currentNode = currentNode.splitText(range.startOffset);
+          }
+          if (
+            currentNode === range.endContainer &&
+            range.endOffset < currentNode.length
+          ) {
+            currentNode.splitText(range.endOffset);
+          }
+
+          // Highlight the selected text node
+          const highlightSpan = document.createElement("span");
+          highlightSpan.style.backgroundColor = "yellow";
+          if ("text" == window.VIEW_MODE) highlightSpan.style.color = "black";
+          else highlightSpan.style.color = "transparent";
+          parent.replaceChild(highlightSpan, currentNode);
+          highlightSpan.appendChild(currentNode);
+
+          highlightSpans.push(highlightSpan);
+        }
       }
     }
+    var qrCode = getQRCode(pageUrl);
+
 
     // Convert the element to a canvas using html2canvas
     const canvas = await html2canvas(bookPageElement, {
-      foreignObjectRendering: true,
+      onclone: async function (doc) {
+        const canvasWrapper = doc.getElementById("viewer");
+        qrCodeElement = doc.createElement('div');
+        qrCodeElement.style.position = "absolute";
+        qrCodeElement.style.bottom = "0.1%";
+        qrCodeElement.style.left = "50%";
+        qrCodeElement.style.transform = "translateX(-50%)";
+        qrCode.append(qrCodeElement);
+        canvasWrapper.appendChild(qrCodeElement);
+        await sleep(1000);
+      },
     });
     const imageBlob = await new Promise(resolve =>
       canvas.toBlob(resolve, "image/png")
