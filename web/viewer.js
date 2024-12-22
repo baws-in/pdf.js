@@ -22,6 +22,8 @@ import { PDFViewerApplication } from "./app.js";
 import {kruti2unicode,chanakya2unicode} from '../src/display/krutidev2unicode.js';
 
 
+
+
 /* eslint-disable-next-line no-unused-vars */
 const pdfjsVersion =
   typeof PDFJSDev !== "undefined" ? PDFJSDev.eval("BUNDLE_VERSION") : void 0;
@@ -177,17 +179,40 @@ function getViewerConfiguration() {
 }
 function kruti2unicodeEx(str)
 {
-  return kruti2unicode(str)
+  return kruti2unicode(str);
 }
-window.kruti2unicodeEx  = kruti2unicodeEx
+window.kruti2unicodeEx  = kruti2unicodeEx;
 
 function chanakya2unicodeEx(str){
 
-  return chanakya2unicode(str)
+  return chanakya2unicode(str);
 
 }
-window.chanakya2unicodeEx = chanakya2unicodeEx
+window.chanakya2unicodeEx = chanakya2unicodeEx;
 
+function getQRCode(urldata, size) {
+  return new QRCodeStyling({
+    width: size,
+    height: size,
+    type: "svg",
+    image: "https://baws.in/baws-qr-logo.svg",
+    data: urldata,
+    "margin": 0,
+    dotsOptions: {
+      color: "#4267b2",
+      type: "extra-rounded",
+    },
+    "cornersSquareOptions": { "type": "extra-rounded", color: "#4267b2" },
+    backgroundOptions: {
+      color: "transparent",
+    },
+    imageOptions: {
+      crossOrigin: "anonymous",
+      margin: 0,
+    },
+  });
+}
+window.getQRCode = getQRCode;
 function webViewerLoad() {
   const config = getViewerConfiguration();
 
@@ -236,5 +261,6 @@ export {
   AppOptions as PDFViewerApplicationOptions,
   kruti2unicodeEx,
   chanakya2unicodeEx,
+  getQRCode,
 };
 

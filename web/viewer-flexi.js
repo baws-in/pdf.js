@@ -1,3 +1,5 @@
+//import * as QRCodeStyling from "qr-code-styling/lib/qr-code-styling";
+
 //import { PDFViewerApplication } from "./app";
 
 const switchMode = mode => {
@@ -1194,28 +1196,7 @@ function uuidv4() {
   );
 }
 
-function getQRCode(urldata, size) {
-  return new QRCodeStyling({
-    width: size,
-    height: size,
-    type: "svg",
-    image: "https://baws.in/baws-qr-logo.svg",
-    data: urldata,
-    "margin": 0,
-    dotsOptions: {
-      color: "#4267b2",
-      type: "extra-rounded",
-    },
-    "cornersSquareOptions": { "type": "extra-rounded", color: "#4267b2" },
-    backgroundOptions: {
-      color: "transparent",
-    },
-    imageOptions: {
-      crossOrigin: "anonymous",
-      margin: 0,
-    },
-  });
-}
+
 
 async function shareBookPageContent(selectedText, title, pageUrl) {
   try {
@@ -1325,22 +1306,23 @@ async function shareBookPageContent(selectedText, title, pageUrl) {
     }
 
 
-    var qrCode = getQRCode(pageUrl, bookPageElement.offsetHeight*0.08);
-
-
+    var qrCode = getQRCode(pageUrl, bookPageElement.offsetHeight*0.07);
+    
     // Convert the element to a canvas using html2canvas
     const canvas = await html2canvas(bookPageElement, {
       onclone: async function (doc) {
-        const canvasWrapper = doc.getElementById("viewer");
+        const canvasWrapper = doc.getElementsByClassName("page")[0];
         qrCodeElement = doc.createElement('div');
-        qrCodeElement.style.position = "absolute";
-        qrCodeElement.style.bottom = "0.1%";
-        qrCodeElement.style.left = "50%";
-        qrCodeElement.style.transform = "translateX(-50%)";
+        //qrCodeElement.style.transform = "translateX(-50%)";
         qrCode.append(qrCodeElement);
         canvasWrapper.appendChild(qrCodeElement);
+        qrCodeElement.style.position = "absolute";
+        qrCodeElement.style.bottom = "0.1%";
+        qrCodeElement.style.right = "0.1%";
+        await sleep(1000);
       },
     });
+    
     const imageBlob = await new Promise(resolve =>
       canvas.toBlob(resolve, "image/png")
     );
