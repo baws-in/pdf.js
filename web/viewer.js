@@ -190,12 +190,12 @@ function chanakya2unicodeEx(str){
 }
 window.chanakya2unicodeEx = chanakya2unicodeEx;
 
-function getQRCode(urldata, size) {
+function getQRCode(urldata, size, imageUrl = "https://baws.in/baws-qr-logo.svg") {
   return new QRCodeStyling({
     width: size,
     height: size,
     type: "svg",
-    image: "https://baws.in/baws-qr-logo.svg",
+    image: imageUrl,
     data: urldata,
     "margin": 0,
     dotsOptions: {

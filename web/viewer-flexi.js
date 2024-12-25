@@ -29,7 +29,7 @@ const toggleView = event => {
 // text | pdf
 window.VIEW_MODE = "pdf";
 window.switchMode = switchMode;
-
+var isShareButtonHooked = false;
 var selectedText = "";
 var moreReadable = true;
 var isBookLoaded = false;
@@ -1196,12 +1196,10 @@ function uuidv4() {
   );
 }
 
-
-
-async function shareBookPageContent(selectedText, title, pageUrl) {
+async function shareBookPageContent(selectedText, title, pageUrl, isLongPressShare) {
   try {
     // Get the HTML element to convert into an image
-    var bookPageElement = document.getElementById("viewer");
+    var bookPageElement = document.getElementsByClassName("page")[0];
 
     if (!bookPageElement) {
       console.log("The 'bookPage' element was not found on the page.");
@@ -1209,7 +1207,7 @@ async function shareBookPageContent(selectedText, title, pageUrl) {
     }
     const highlightSpans = [];
     var selection = window.getSelection();
-    if (selection.rangeCount > 0) {
+    if (selection.rangeCount > 0 && "pdf" == window.VIEW_MODE) {
       // Highlight the selected text
       const range = selection.getRangeAt(0);
 
@@ -1305,27 +1303,37 @@ async function shareBookPageContent(selectedText, title, pageUrl) {
       }
     }
 
+    var qrCode = null;
+    var canvas = null;
+    if ("pdf" == window.VIEW_MODE) {
+      if (!isLongPressShare) {
+        qrCode = getQRCode(pageUrl, bookPageElement.offsetHeight * 0.07);
+        // Convert the element to a canvas using html2canvas
+        canvas = await html2canvas(bookPageElement, {
+          onclone: async function (doc) {
+            if ("text" == window.VIEW_MODE || !qrCode) return;
+            const canvasWrapper = doc.getElementsByClassName("page")[0];
+            var qrCodeElement = doc.createElement("div");
+            //qrCodeElement.style.transform = "translateX(-50%)";
+            qrCode.append(qrCodeElement);
+            canvasWrapper.appendChild(qrCodeElement);
+            qrCodeElement.style.position = "absolute";
+            qrCodeElement.style.bottom = "0.1%";
+            qrCodeElement.style.right = "0.1%";
+            await sleep(1000);
+          },
+        });
+      } else {
+        qrCode = getQRCode(pageUrl, 600, "https://baws.in/baws_social_logo.svg");
+        qrCode.download({ name: uuidv4(), extension: "png" });
+        return;
+      }
+    }
 
-    var qrCode = getQRCode(pageUrl, bookPageElement.offsetHeight*0.07);
-    
-    // Convert the element to a canvas using html2canvas
-    const canvas = await html2canvas(bookPageElement, {
-      onclone: async function (doc) {
-        const canvasWrapper = doc.getElementsByClassName("page")[0];
-        qrCodeElement = doc.createElement('div');
-        //qrCodeElement.style.transform = "translateX(-50%)";
-        qrCode.append(qrCodeElement);
-        canvasWrapper.appendChild(qrCodeElement);
-        qrCodeElement.style.position = "absolute";
-        qrCodeElement.style.bottom = "0.1%";
-        qrCodeElement.style.right = "0.1%";
-        await sleep(1000);
-      },
-    });
-    
     const imageBlob = await new Promise(resolve =>
       canvas.toBlob(resolve, "image/png")
     );
+
 
     // Cleanup: Remove the highlight spans and restore the original text
     // Cleanup: Restore the original text content
@@ -1370,8 +1378,59 @@ async function shareBookPageContent(selectedText, title, pageUrl) {
     3000
   );
 }
+document.addEventListener('DOMContentLoaded', (event) => {
+  const shareButton = document.getElementById('shareButton');
 
-async function shareButtonClick() {
+  if (isShareButtonHooked) return;
+  let pressTimer;
+  let isLongPress = false;
+  let isPressing = false;
+
+  const startPress = () => {
+    console.log(isPressing);
+    if (isPressing) return;
+    isLongPress = false;
+    isPressing = true;
+    pressTimer = setTimeout(() => {
+      isLongPress = true;
+      //onLongPress();
+    }, 1000); // 1000ms = 1 second
+  };
+
+  const endPress = () => {
+    console.log(isPressing);
+    if (!isPressing) return;
+    isPressing = false;
+    clearTimeout(pressTimer);
+    {
+      shareButtonClick(isLongPress);
+    }
+  };
+
+  shareButton.addEventListener('mousedown', startPress);
+  shareButton.addEventListener('touchstart', startPress);
+
+  shareButton.addEventListener('mouseup', endPress);
+  shareButton.addEventListener('touchend', endPress);
+
+  shareButton.addEventListener('mouseleave', () => {
+    clearTimeout(pressTimer);
+    isPressing = false;
+  });
+
+  shareButton.addEventListener('touchcancel', () => {
+    clearTimeout(pressTimer);
+    isPressing = false;
+  });
+
+  function onLongPress() {
+    console.log('Long press detected');
+    // Add your long press logic here
+  }
+  isShareButtonHooked = true;
+
+});
+async function shareButtonClick(isLongPressShare) {
   if (window.getSelection() && window) {
     console.log(PDFViewerApplication);
     console.log(window.location.origin);
@@ -1434,7 +1493,7 @@ async function shareButtonClick() {
         genericShowPanel(panelMessageForUrl, 3000);
       }
 
-      await shareBookPageContent(selectedText, title, shortUrl);
+      await shareBookPageContent(selectedText, title, shortUrl, isLongPressShare);
     }
   }
 }
