@@ -190,14 +190,15 @@ function chanakya2unicodeEx(str){
 }
 window.chanakya2unicodeEx = chanakya2unicodeEx;
 
-function getQRCode(urldata, size, imageUrl = "https://baws.in/baws-qr-logo.svg") {
+function getQRCode(urldata, size, imageUrl = "https://baws.in/baws-qr-logo.svg", margin=0) {
+  const parts = imageUrl.split('.');
   return new QRCodeStyling({
     width: size,
     height: size,
-    type: "svg",
+    type: parts[parts.length - 1],
     image: imageUrl,
     data: urldata,
-    "margin": 0,
+    "margin": margin,
     dotsOptions: {
       color: "#4267b2",
       type: "extra-rounded",

@@ -1324,7 +1324,7 @@ async function shareBookPageContent(selectedText, title, pageUrl, isLongPressSha
           },
         });
       } else {
-        qrCode = getQRCode(pageUrl, 600, "https://baws.in/baws_social_logo.svg");
+        qrCode = getQRCode(pageUrl, 600, "https://baws.in/baws_social_logo.png", 20);
         qrCode.download({ name: uuidv4(), extension: "png" });
         return;
       }
@@ -1361,7 +1361,6 @@ async function shareBookPageContent(selectedText, title, pageUrl, isLongPressSha
     if (detectMobileOS() === "Android") {
       await navigator.share({
         title: title,
-        text: selectedText,
         url: pageUrl,
         files: [imageFile],
       });
