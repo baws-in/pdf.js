@@ -30,7 +30,7 @@
    --doorhanger-icon-opacity: 0.9;
  
    --main-color: rgba(12, 12, 13, 1);
-   --body-bg-color: rgba(212, 212, 215, 1);
+   --body-bg-color: rgba(42, 42, 46, 1);
    --progressBar-color: rgba(10, 132, 255, 1);
    --progressBar-bg-color: rgba(221, 221, 222, 1);
    --progressBar-blend-color: rgba(116, 177, 239, 1);
@@ -39,7 +39,7 @@
    --toolbar-icon-bg-color: rgba(0, 0, 0, 1);
    --toolbar-icon-hover-bg-color: rgba(0, 0, 0, 1);
  
-   --sidebar-narrow-bg-color: rgba(212, 212, 215, 0.9);
+   --sidebar-narrow-bg-color: rgba(42, 42, 46, 0.9);
    --sidebar-toolbar-bg-color: rgba(245, 246, 247, 1);
    --toolbar-bg-color: rgba(249, 249, 250, 1);
    --toolbar-border-color: rgba(184, 184, 184, 1);
@@ -60,11 +60,11 @@
    --field-color: rgba(6, 6, 6, 1);
    --field-bg-color: rgba(255, 255, 255, 1);
    --field-border-color: rgba(187, 187, 188, 1);
-   --treeitem-color: rgba(0, 0, 0, 0.8);
-   --treeitem-bg-color: rgba(0, 0, 0, 0.15);
-   --treeitem-hover-color: rgba(0, 0, 0, 0.9);
-   --treeitem-selected-color: rgba(0, 0, 0, 0.9);
-   --treeitem-selected-bg-color: rgba(0, 0, 0, 0.25);
+   --treeitem-color: rgba(255, 255, 255, 0.8);
+   --treeitem-bg-color: rgba(255, 255, 255, 0.15);
+   --treeitem-hover-color: rgba(255, 255, 255, 0.9);
+   --treeitem-selected-color: rgba(255, 255, 255, 0.9);
+   --treeitem-selected-bg-color: rgba(255, 255, 255, 0.25);
    --thumbnail-hover-color: rgba(0, 0, 0, 0.1);
    --thumbnail-selected-color: rgba(0, 0, 0, 0.2);
    --doorhanger-bg-color: rgba(255, 255, 255, 1);
@@ -1509,6 +1509,16 @@
   text-align: center;
 }
 
+.responsive-font {
+  font-size: 1em;
+}
+
+@media (max-width: 768px) {
+  .responsive-font {
+    font-size: 1.25em;
+  }
+}
+
 .page_prev_icon{
   z-index: 11;
   position: fixed;
@@ -1553,3 +1563,44 @@
 }
 
 
+/* --- CHANGED --- */
+/* Container for a single, complete highlight (which can span multiple lines) */
+.highlight-group {
+    pointer-events: none;
+}
+
+/* The individual yellow bars for each line of text */
+.highlight-layer {
+    position: absolute;
+    background-color: rgba(255, 255, 0, 0.25);
+    border-radius: 2px;
+    pointer-events: none; 
+}
+
+/* Delete button for highlights */
+.delete-highlight-btn {
+    position: absolute; /* Positioned relative to page-container */
+    width: 20px;
+    height: 20px;
+    background-color: #ef4444; /* red-500 */
+    color: white;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: sans-serif;
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 1;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    opacity: 0.6; /* Visible by default, but not intrusive */
+    transition: all 0.2s ease-in-out;
+    pointer-events: auto; /* The button is the only interactive part */
+    z-index: 10;
+}
+
+.delete-highlight-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}/* --- END CHANGED --- */

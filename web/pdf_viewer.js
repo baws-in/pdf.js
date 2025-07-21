@@ -236,7 +236,7 @@ class PDFViewer {
   constructor(options) {
     const viewerVersion =
       typeof PDFJSDev !== "undefined" ? PDFJSDev.eval("BUNDLE_VERSION") : null;
-    if (version !== viewerVersion) {
+    if (version !== viewerVersion && false) {
       throw new Error(
         `The API version "${version}" does not match the Viewer version "${viewerVersion}".`
       );

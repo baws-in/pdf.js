@@ -31,6 +31,10 @@ window.VIEW_MODE = "pdf";
 window.switchMode = switchMode;
 var isShareButtonHooked = false;
 var selectedText = "";
+const RENDER_SCALE = 1.5;
+let storedHighlights = []; // This array will store our highlight coordinates
+let viewer = null;
+
 var moreReadable = true;
 var isBookLoaded = false;
 var flexi_isFullscreen = false;
@@ -163,6 +167,9 @@ $(document).ready(function () {
 
       postBawsMsg("pageChanged");
       this._isPagesLoaded = true;
+      viewer = document.getElementById("viewer");
+      viewer.addEventListener("click", handleDeleteClick);
+      setupResizeObserver();
       console.log(synth);
       /*PDFViewerApplication.eventBus._on("pagesloaded", evt => {
         isBookLoaded = true
@@ -170,6 +177,9 @@ $(document).ready(function () {
         this._isPagesLoaded = !!evt.pagesCount;
         console.log(synth)
       });*/
+      PDFViewerApplication.eventBus._on("pagerendered", evt => {
+        setupResizeObserver();
+      });
       PDFViewerApplication.eventBus._on("pagechanging", evt => {
         isBookLoaded = true;
         if (evt.pageNumber) postBawsMsg("pageChanged");
@@ -334,6 +344,12 @@ function onCopy() {
 }
 
 function onBookClick() {
+  if (isOnMobile()) {
+    if (PDFViewerApplication.pdfSidebar.isOpen) {
+      PDFViewerApplication.pdfSidebar.toggle();
+    }
+  }
+
   if (
     window &&
     window.getSelection() &&
@@ -342,7 +358,7 @@ function onBookClick() {
     console.log(PDFViewerApplication);
     console.log(window.location.origin);
     let strSelectedTest = window.getSelection().toString();
-    var selectedText = strSelectedTest.replace(/(\r\n|\n|\r)/gm, " ");
+    selectedText = strSelectedTest.replace(/(\r\n|\n|\r)/gm, " ");
     //disabled
     //clearTextSelection()
     //$('#textShareModal').modal('show')
@@ -641,7 +657,9 @@ async function startReading(paramText) {
     let str = paramText.replace(/\*/g, "");
     str = str.replace(/ Manusmriti /g, " मनुस्मृति ");
     str = str.replace(/ Smriti /g, " स्मृति ");
-    str = str.replace(/ Shundras /g, " Shoodras ");
+    str = str.replace(/ Smritis /g, " स्मृति ");
+    str = str.replace(/ Shudras /g, " Shoodras ");
+    str = str.replace(/ Shudra /g, " Shoodra ");
     str = str.replace(/ B.C. /g, " BC ");
     str = str.replace(/ A.D. /g, " AD ");
     str = str.replace(/ Dr. /g, " doctor ");
@@ -650,6 +668,9 @@ async function startReading(paramText) {
     str = str.replace(/ Mrs. /g, " Missus ");
     str = str.replace(/ Prof. /g, " Professor ");
     str = str.replace(/ i.e. /g, " ,that is, ");
+    if (str === str.toUpperCase()) {
+      str = str.toLowerCase();
+    }
 
     msg.text = str;
     console.log("Speaking: " + str);
@@ -763,7 +784,7 @@ async function startNodeReading(contentNode, startIndex) {
             entireWord: true,
             highlightAll: true,
             findPrevious: false,
-            matchDiacritics: true,
+            matchDiacritics: false,
           });
           await startReading(toRead);
         }
@@ -1196,7 +1217,12 @@ function uuidv4() {
   );
 }
 
-async function shareBookPageContent(selectedText, title, pageUrl, isLongPressShare) {
+async function shareBookPageContent(
+  selectedText,
+  title,
+  pageUrl,
+  isLongPressShare
+) {
   try {
     // Get the HTML element to convert into an image
     var bookPageElement = document.getElementsByClassName("page")[0];
@@ -1324,7 +1350,12 @@ async function shareBookPageContent(selectedText, title, pageUrl, isLongPressSha
           },
         });
       } else {
-        qrCode = getQRCode(pageUrl, 600, "https://baws.in/baws_social_logo.png", 20);
+        qrCode = getQRCode(
+          pageUrl,
+          600,
+          "https://baws.in/baws_social_logo.png",
+          50
+        );
         qrCode.download({ name: uuidv4(), extension: "png" });
         return;
       }
@@ -1333,7 +1364,6 @@ async function shareBookPageContent(selectedText, title, pageUrl, isLongPressSha
     const imageBlob = await new Promise(resolve =>
       canvas.toBlob(resolve, "image/png")
     );
-
 
     // Cleanup: Remove the highlight spans and restore the original text
     // Cleanup: Restore the original text content
@@ -1377,8 +1407,8 @@ async function shareBookPageContent(selectedText, title, pageUrl, isLongPressSha
     3000
   );
 }
-document.addEventListener('DOMContentLoaded', (event) => {
-  const shareButton = document.getElementById('shareButton');
+document.addEventListener("DOMContentLoaded", event => {
+  const shareButton = document.getElementById("shareButton");
 
   if (isShareButtonHooked) return;
   let pressTimer;
@@ -1406,28 +1436,27 @@ document.addEventListener('DOMContentLoaded', (event) => {
     }
   };
 
-  shareButton.addEventListener('mousedown', startPress);
-  shareButton.addEventListener('touchstart', startPress);
+  shareButton.addEventListener("mousedown", startPress);
+  shareButton.addEventListener("touchstart", startPress);
 
-  shareButton.addEventListener('mouseup', endPress);
-  shareButton.addEventListener('touchend', endPress);
+  shareButton.addEventListener("mouseup", endPress);
+  shareButton.addEventListener("touchend", endPress);
 
-  shareButton.addEventListener('mouseleave', () => {
+  shareButton.addEventListener("mouseleave", () => {
     clearTimeout(pressTimer);
     isPressing = false;
   });
 
-  shareButton.addEventListener('touchcancel', () => {
+  shareButton.addEventListener("touchcancel", () => {
     clearTimeout(pressTimer);
     isPressing = false;
   });
 
   function onLongPress() {
-    console.log('Long press detected');
+    console.log("Long press detected");
     // Add your long press logic here
   }
   isShareButtonHooked = true;
-
 });
 async function shareButtonClick(isLongPressShare) {
   if (window.getSelection() && window) {
@@ -1492,12 +1521,224 @@ async function shareButtonClick(isLongPressShare) {
         genericShowPanel(panelMessageForUrl, 3000);
       }
 
-      await shareBookPageContent(selectedText, title, shortUrl, isLongPressShare);
+      await shareBookPageContent(
+        selectedText,
+        title,
+        shortUrl,
+        isLongPressShare
+      );
     }
   }
 }
 
-function addBookMark() {
+async function saveSelection() {
+  const pdfDoc = PDFViewerApplication.pdfDocument;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) {
+    console.log("No text selected.");
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+
+  const pageContainer = range.startContainer.parentElement.closest(".page");
+  if (!pageContainer) {
+    console.error("Selection is not within a PDF page.");
+    return;
+  }
+
+  const pageNum = parseInt(pageContainer.dataset.pageNumber);
+  const pageRect = pageContainer.getBoundingClientRect();
+
+  // Get the viewport to calculate relative coordinates
+  const page = await pdfDoc.getPage(pageNum);
+
+  const selectionRects = range.getClientRects();
+
+  const relativeRects = Array.from(selectionRects)
+    // Filter out zero-width rectangles which can occur in some PDFs
+    .filter(rect => rect.width > 0)
+    .map(rect => ({
+        topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
+        leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
+        widthPercent: (rect.width / pageRect.width) * 100,
+        heightPercent: (rect.height / pageRect.height) * 100,
+    }));
+
+  // If filtering removed all rectangles, do not proceed.
+  if (relativeRects.length === 0) {
+    console.log("Selection resulted in no valid highlight rectangles after filtering.");
+    selection.removeAllRanges();
+    return;
+  }
+
+  const newHighlight = {
+    id: crypto.randomUUID(),
+    pageNumber: pageNum,
+    rects: relativeRects,
+  };
+
+  addHighlights([newHighlight]);
+}
+
+/**
+ * Adds an array of highlight objects to the current document.
+ * @param {Array<Object>} newHighlights - An array of highlight objects to add.
+ */
+function addHighlights(newHighlights) {
+  const pdfDoc = PDFViewerApplication.pdfDocument;
+  if (!pdfDoc) {
+    console.error("Cannot add highlights: No PDF is loaded.");
+    return;
+  }
+  if (!Array.isArray(newHighlights) || newHighlights.length === 0) {
+    console.log("No new highlights to add.");
+    return;
+  }
+
+  storedHighlights.push(...newHighlights);
+
+  console.log(`${newHighlights.length} new highlight(s) added and saved.`);
+
+  const pagesToUpdate = [...new Set(newHighlights.map(h => h.pageNumber))];
+  pagesToUpdate.forEach(pageNum => {
+    drawHighlightsOnPage(pageNum);
+  });
+}
+
+/**
+ * Draws all stored highlights for a specific page.
+ * @param {number} pageNum The page number to draw highlights on.
+ */
+async function drawHighlightsOnPage(pageNum) {
+  const pdfDoc = PDFViewerApplication.pdfDocument;
+  clearHighlightsOnPage(pageNum);
+  
+
+  const pageContainer = document.querySelector(
+    `.page[data-page-number='${pageNum}']`
+  );
+  if (!pageContainer) return;
+
+  pageContainer
+    .querySelectorAll(".highlight-group")
+    .forEach(group => group.remove());
+
+  // Get the page and its current viewport to calculate absolute positions
+  const page = await pdfDoc.getPage(pageNum);
+  const pageRect = pageContainer.getBoundingClientRect(); // Get current on-screen size
+
+  const highlightsToDraw = storedHighlights.filter(
+    h => h.pageNumber === pageNum
+  );
+
+  highlightsToDraw.forEach(highlight => {
+    if (!highlight.rects || highlight.rects.length === 0) return;
+
+
+    // 1. Create the group container. It's for logical grouping only.
+    const group = document.createElement("div");
+    group.className = "highlight-group";
+    group.dataset.highlightId = highlight.id;
+
+    // 2. Create and position the visual highlight layers.
+    highlight.rects.forEach(rect => {
+      const el = document.createElement("div");
+      el.className = "highlight-layer";
+
+      // Position absolutely within the page container
+      el.style.top = `${(rect.topPercent / 100) * pageRect.height}px`;
+      el.style.left = `${(rect.leftPercent / 100) * pageRect.width}px`;
+      el.style.width = `${(rect.widthPercent / 100) * pageRect.width}px`;
+      el.style.height = `${(rect.heightPercent / 100) * pageRect.height}px`;
+
+      group.appendChild(el);
+    });
+
+    // 3. Calculate the absolute position for the delete button.
+    const topPercents = highlight.rects.map(r => r.topPercent);
+    const rightPercents = highlight.rects.map(
+      r => r.leftPercent + r.widthPercent
+    );
+
+    const minTopPercent = Math.min(...topPercents);
+    const maxRightPercent = Math.max(...rightPercents);
+
+    // 4. Create and position the delete button.
+    const deleteBtn = document.createElement("div");
+    deleteBtn.className = "delete-highlight-btn";
+    deleteBtn.textContent = "×";
+    deleteBtn.dataset.highlightId = highlight.id;
+
+    // Position it absolutely on the page, at the top-right of the highlight's bounding box.
+    // The offsets (-10px) are to center the button on the corner.
+    deleteBtn.style.top = `${(minTopPercent / 100) * pageRect.height - 10}px`;
+    deleteBtn.style.left = `${(maxRightPercent / 100) * pageRect.width - 10}px`;
+
+    group.appendChild(deleteBtn);
+
+    pageContainer.appendChild(group);
+    
+  });
+}
+
+/**
+ * Removes highlight elements from a specific page.
+ * @param {number} pageNum The page to clear.
+ */
+function clearHighlightsOnPage(pageNum) {
+  const pdfDoc = PDFViewerApplication.pdfDocument;
+  if (!pdfDoc) {
+    console.error("Cannot clear highlights: No PDF is loaded.");
+    return;
+  }
+  const pageContainer = document.querySelector(
+    `.page-container[data-page-number='${pageNum}']`
+  );
+  if (pageContainer) {
+    const oldHighlights = pageContainer.querySelectorAll(".highlight-group");
+    oldHighlights.forEach(h => h.remove());
+  }
+}
+
+function handleDeleteClick(event) {
+  const target = event.target;
+  if (target.classList.contains("delete-highlight-btn")) {
+    const highlightId = target.dataset.highlightId;
+    if (highlightId) {
+      deleteHighlight(highlightId);
+    }
+  }
+}
+
+function deleteHighlight(id) {
+  // Remove from the stored array
+  const index = storedHighlights.findIndex(h => h.id === id);
+  if (index > -1) {
+    storedHighlights.splice(index, 1);
+    
+
+    // Remove from the DOM
+    const groupElement = viewer.querySelector(
+      `.highlight-group[data-highlight-id='${id}']`
+    );
+    if (groupElement) {
+      groupElement.remove();
+    }
+    console.log(`Deleted highlight ${id}`);
+  }
+}
+
+async function setupResizeObserver() {
+  console.log("Resizing detected, redrawing highlights...");
+  const pdfDoc = PDFViewerApplication.pdfDocument;
+  if (!pdfDoc) return;
+  const current_pageNumber = PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber;  
+  await drawHighlightsOnPage(current_pageNumber);
+  
+}
+async function addBookMark() {
+  saveSelection();
   let bookMarksStr = localStorage.getItem("bookMarks");
   let bookMarks = [];
   if (bookMarksStr) {

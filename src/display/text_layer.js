@@ -1190,9 +1190,35 @@ class TextLayerRenderTask {
       this._container.append(textDiv);
     }
     if (textDivProperties.hasEOL) {
-      const br = document.createElement("br");
-      br.setAttribute("role", "presentation");
-      this._container.append(br);
+      const brDiv = document.createElement("div");
+      brDiv.setAttribute("role", "presentation");
+      brDiv.style.position = "absolute";
+
+      if (textDivProperties.hasEOL) {
+        const brDiv = document.createElement("div");
+        brDiv.setAttribute("role", "presentation");
+        brDiv.style.position = "absolute";
+
+        // CORRECT: Get the raw, unscaled values directly from the properties object.
+        const { x, y, width, height } = textDivProperties;
+
+        // A safety check to ensure the properties exist
+        if (x === undefined || y === undefined || width === undefined || height === undefined) {
+
+            return;
+        }
+
+        // Construct the styles for our new div using the same calc() pattern
+        // that pdf.js uses for the main text spans.
+        brDiv.style.top = `calc(var(--scale-factor)*${y}px)`;
+        brDiv.style.height = `calc(var(--scale-factor)*${height}px)`;
+        
+        // Position the new div horizontally at the end of the text span
+        brDiv.style.left = `calc(var(--scale-factor)*${x + width}px)`;
+        brDiv.style.width = "0px"; // Make it an invisible marker
+
+        this._container.append(brDiv);
+      }
     }
   }
 

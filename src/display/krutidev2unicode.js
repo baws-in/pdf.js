@@ -1088,6 +1088,8 @@ export function chanakya2unicode(str) {
     "क्क",
     "äQ",
     "क्त",
+    "Ÿk",
+    "त्त",
     "ä",
     "त्त",
     "{",
@@ -1168,7 +1170,7 @@ export function chanakya2unicode(str) {
     "Ř",
     "क्र",
     "Ý",
-    "फ्र",
+    "फ",
 
     "æ",
     "द्र",
@@ -1374,7 +1376,12 @@ export function chanakya2unicode(str) {
     //substitute array_two elements in place of corresponding array_one elements
 
     if (modified_substring != "") {
-      // if stringto be converted is non-blank then no need of any processing.
+      // if stringto be converted is blank then no need of any processing.
+      modified_substring = modified_substring.replace(/‘ª/g, 'ष्ट्र');
+      modified_substring = modified_substring.replace(/é/g, 'Â');
+      modified_substring = modified_substring.replace(/ÝQ/g, 'iQ');
+      modified_substring = modified_substring.replace(/Õk/g, ';');
+      modified_substring = modified_substring.replace(/sk/g, 'ks');
       modified_substring = modified_substring.replace(
         /([ ])([kzsSqwWa¡`±ZQ\+‚¨®sS©h¢ˇ%•∙·~ÈÊ\›õ])/g,
         "$2"
@@ -1604,6 +1611,7 @@ var array_one = new Array(
 "Ô" ,	"ड्ढ" ,
 
 "Ù" ,	"त्त्" ,
+"Ÿ" ,  "त्त",
 "=" ,	"त्र" ,
 "«" ,	"त्र्" ,
 "–" ,	"दृ" ,
@@ -1747,59 +1755,57 @@ var modified_substring = str  ;
 
 // --------------------------------------------------
 
-function Replace_Symbols( )
-{
+  function Replace_Symbols() {
 
-//substitute array_two elements in place of corresponding array_one elements
+    //substitute array_two elements in place of corresponding array_one elements
 
-if ( modified_substring != "" )  // if stringto be converted is non-blank then no need of any processing.
-{
-for ( var input_symbol_idx = 0;   input_symbol_idx < array_one_length-1;    input_symbol_idx=input_symbol_idx+2 )
+    if (modified_substring != "")  // if stringto be converted is non-blank then no need of any processing.
+    {
+      modified_substring = modified_substring.replace(/sk/g, 'ks');
+      for (var input_symbol_idx = 0; input_symbol_idx < array_one_length - 1; input_symbol_idx = input_symbol_idx + 2) {
 
-{
+        var idx = 0;  // index of the symbol being searched for replacement
 
-var idx = 0  ;  // index of the symbol being searched for replacement
+        while (idx != -1) //whie-00
+        {
 
-while (idx != -1 ) //whie-00
-{
+          modified_substring = modified_substring.replace(array_one[input_symbol_idx], array_one[input_symbol_idx + 1])
+          idx = modified_substring.indexOf(array_one[input_symbol_idx])
 
-modified_substring = modified_substring.replace( array_one[ input_symbol_idx ] , array_one[input_symbol_idx+1] )
-idx = modified_substring.indexOf( array_one[input_symbol_idx] )
-
-} // end of while-00 loop
-} // end of for loop
+        } // end of while-00 loop
+      } // end of for loop
 
 
-// following statements for adjusting postion of i maatraas.
+      // following statements for adjusting postion of i maatraas.
 
-modified_substring = modified_substring.replace(   /([fÇ])([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])/g , "$2$1" ) ;
+      modified_substring = modified_substring.replace(/([fÇ])([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])/g, "$2$1");
 
-modified_substring = modified_substring.replace(   /([fÇ])(्)([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])/g , "$2$3$1" ) ;
+      modified_substring = modified_substring.replace(/([fÇ])(्)([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])/g, "$2$3$1");
 
-modified_substring = modified_substring.replace(   /([fÇ])(्)([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])/g , "$2$3$1" ) ;
+      modified_substring = modified_substring.replace(/([fÇ])(्)([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])/g, "$2$3$1");
 
-modified_substring = modified_substring.replace( /f/g , "ि" ) ;
-modified_substring = modified_substring.replace( /Ç/g , "िं" ) ;
+      modified_substring = modified_substring.replace(/f/g, "ि");
+      modified_substring = modified_substring.replace(/Ç/g, "िं");
 
 
-//following three statement for adjusting position of reph ie, half r .
-modified_substring = modified_substring.replace( /([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])([ािीुूृेैोौंँ]*)([Z])/g , "$3$1$2" ) ;
+      //following three statement for adjusting position of reph ie, half r .
+      modified_substring = modified_substring.replace(/([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])([ािीुूृेैोौंँ]*)([Z])/g, "$3$1$2");
 
-modified_substring = modified_substring.replace( /([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])([्])([Z])/g , "$3$1$2" ) ;
+      modified_substring = modified_substring.replace(/([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])([्])([Z])/g, "$3$1$2");
 
-modified_substring = modified_substring.replace( /([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])([्])([Z])/g , "$3$1$2" ) ;
+      modified_substring = modified_substring.replace(/([कखगघङचछजझञटठडड़ढढ़णतथदधनपफबभमयरलवशषसहक़ख़ग़ज़ड़ढ़फ़])([्])([Z])/g, "$3$1$2");
 
-modified_substring = modified_substring.replace( /Z/g , "र्" ) ;
+      modified_substring = modified_substring.replace(/Z/g, "र्");
 
-// remove maatras typed wrongly
-modified_substring = modified_substring.replace( /([ंँ॰])([ािीुूृेैोौ])/g , "$2$1" );
+      // remove maatras typed wrongly
+      modified_substring = modified_substring.replace(/([ंँ॰])([ािीुूृेैोौ])/g, "$2$1");
 
-modified_substring = modified_substring.replace( /([ािीुूृेैोौंँ])([ािीुूृेैोौ])/g , "$1" ) ;
+      modified_substring = modified_substring.replace(/([ािीुूृेैोौंँ])([ािीुूृेैोौ])/g, "$1");
 
-} // end of IF  statement  meant to  supress processing of  blank  string.
+    } // end of IF  statement  meant to  supress processing of  blank  string.
 
-} // end of the function  Replace_Symbols
- 
+  } // end of the function  Replace_Symbols
+
 } // end of Krutidev_to_unicode function
 
 
