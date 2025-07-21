@@ -52,7 +52,7 @@ if ("speechSynthesis" in window) {
   var msg = new SpeechSynthesisUtterance();
   var synth = window.speechSynthesis;
 
-  setVoices();
+  
 }
 
 let wakeLock = null;
@@ -150,18 +150,36 @@ $(document).ready(function () {
   function loadPdfApp() {
     scondsCount++;
     if (
-      PDFViewerApplication &&
-      PDFViewerApplication.eventBus &&
-      PDFViewerApplication.initialized &&
-      PDFViewerApplication.pdfViewer.onePageRendered
+      window.PDFViewerApplication &&      
+      window.PDFViewerApplication.eventBus &&
+      window.PDFViewerApplication.initialized &&
+      window.PDFViewerApplication.pdfViewer.onePageRendered
     ) {
       clearTimeout(loadPdfTimeOut);
+      setVoices();
       isBookLoaded = true;
+      
       const { onePageRendered } = PDFViewerApplication.pdfViewer;
 
       onePageRendered.then(data => {
         if (isOnMobile()) {
           document.getElementById("view-switch").style.display = "inline-block";
+        }
+      });
+      window.parent.postMessage({ type: 'iframeReady' }, '*');
+      window.addEventListener('message', (event) => {
+        
+        const { type, payload } = event.data;
+        if (type === 'loadHighlights') {
+            const pdfDoc = PDFViewerApplication.pdfDocument;
+            console.log("iframe: Received highlights from parent.");
+            storedHighlights = payload || [];
+            // Redraw all pages with the new data
+            if (pdfDoc) {
+                  const current_pageNumber = PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber;  
+                  drawHighlightsOnPage(current_pageNumber);
+            }
+        
         }
       });
 
@@ -196,6 +214,7 @@ $(document).ready(function () {
           const position = window.innerWidth - rect.right;
           span.style.right = position * 1.1 + "px";
         }
+        
       });
     } else {
       if (scondsCount <= 10) startWatching();
@@ -226,6 +245,15 @@ $(document).ready(function () {
   });
 
   startWatching();
+  
+});
+
+window.addEventListener('load', () => {
+    window.parent.postMessage({ type: 'iframeReady' }, '*');
+});
+
+window.addEventListener('beforeunload', () => {
+    window.parent.postMessage({ type: 'iframeUnloading' }, '*');
 });
 
 // Function that attempts to request a screen wake lock.
@@ -365,11 +393,11 @@ function onBookClick() {
 
     let check_one_word = selectedText.replace(/^[^a-z\d]*|[^a-z\d]*$/gi, "");
     if (
-      parent.dictionary &&
+      window.parent.dictionary &&
       check_one_word.indexOf(" ") <= -1 &&
       check_one_word.length >= 4
     ) {
-      let result = parent.dictionary(check_one_word);
+      let result = window.parent.dictionary(check_one_word);
       console.log(result);
       setTimeout(function () {
         showDictionary(result, check_one_word);
@@ -1513,11 +1541,11 @@ async function shareButtonClick(isLongPressShare) {
           selectedText +
           "\n\nto read more please go to " +
           shortUrl;
-        navigator.clipboard.writeText(selectedText);
+        //navigator.clipboard.writeText(selectedText);
         genericShowPanel(panelMessageForText, 3000);
       } else {
         selectedText = shortUrl;
-        navigator.clipboard.writeText(selectedText);
+        //navigator.clipboard.writeText(selectedText);
         genericShowPanel(panelMessageForUrl, 3000);
       }
 
@@ -1540,6 +1568,17 @@ async function saveSelection() {
   }
 
   const range = selection.getRangeAt(0);
+  let urlData = getBookUrlData();
+  let shortUrl =
+    ("localhost" === window.location.hostname ? "" : window.location.hostname) +
+    "/books/" +
+    urlData.bookParent +
+    "/" +
+    urlData.language +
+    "/" +
+    urlData.bookName +
+    "/pdf/" +
+    urlData.pageNo;
 
   const pageContainer = range.startContainer.parentElement.closest(".page");
   if (!pageContainer) {
@@ -1550,20 +1589,69 @@ async function saveSelection() {
   const pageNum = parseInt(pageContainer.dataset.pageNumber);
   const pageRect = pageContainer.getBoundingClientRect();
 
+  /* --- OPTIMIZATION LOGIC ADDED --- */
+  // This logic merges adjacent rectangles on the same line to reduce data size.
+  const selectionRects = Array.from(range.getClientRects());
+
+  // 1. Group rects by line (using the 'top' coordinate with a tolerance)
+  const lines = new Map();
+  const V_TOLERANCE = 5; // Vertical tolerance in pixels
+
+  for (const rect of selectionRects) {
+      if (rect.width <= 1) continue; // Filter out tiny or zero-width rects
+
+      let added = false;
+      for (const top of lines.keys()) {
+          if (Math.abs(rect.top - top) < V_TOLERANCE) {
+              lines.get(top).push(rect);
+              added = true;
+              break;
+          }
+      }
+      if (!added) {
+          lines.set(rect.top, [rect]);
+      }
+  }
+
+  // 2. Merge rects within each line
+  const mergedRects = [];
+  const H_TOLERANCE = 5; // Horizontal tolerance in pixels
+
+  for (const lineRects of lines.values()) {
+      lineRects.sort((a, b) => a.left - b.left);
+      if (lineRects.length === 0) continue;
+
+      let currentMergedRect = lineRects[0];
+      for (let i = 1; i < lineRects.length; i++) {
+          const nextRect = lineRects[i];
+          const gap = nextRect.left - currentMergedRect.right;
+
+          if (gap <= H_TOLERANCE) { // Check if they are adjacent enough to merge
+              const newRight = Math.max(currentMergedRect.right, nextRect.right);
+              currentMergedRect = new DOMRect(
+                  currentMergedRect.left,
+                  Math.min(currentMergedRect.top, nextRect.top),
+                  newRight - currentMergedRect.left,
+                  Math.max(currentMergedRect.height, nextRect.height)
+              );
+          } else {
+              mergedRects.push(currentMergedRect);
+              currentMergedRect = nextRect;
+          }
+      }
+      mergedRects.push(currentMergedRect);
+  }
+  /* --- END OPTIMIZATION LOGIC --- */
+
   // Get the viewport to calculate relative coordinates
   const page = await pdfDoc.getPage(pageNum);
 
-  const selectionRects = range.getClientRects();
-
-  const relativeRects = Array.from(selectionRects)
-    // Filter out zero-width rectangles which can occur in some PDFs
-    .filter(rect => rect.width > 0)
-    .map(rect => ({
-        topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
-        leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
-        widthPercent: (rect.width / pageRect.width) * 100,
-        heightPercent: (rect.height / pageRect.height) * 100,
-    }));
+  const relativeRects = mergedRects.map(rect => ({
+      topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
+      leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
+      widthPercent: (rect.width / pageRect.width) * 100,
+      heightPercent: (rect.height / pageRect.height) * 100,
+  }));
 
   // If filtering removed all rectangles, do not proceed.
   if (relativeRects.length === 0) {
@@ -1573,11 +1661,16 @@ async function saveSelection() {
   }
 
   const newHighlight = {
-    id: crypto.randomUUID(),
-    pageNumber: pageNum,
+    id: crypto.randomUUID(),    
     rects: relativeRects,
+    url: shortUrl,
+    text: selectedText,
+    pageNo: urlData.pageNo,
+    context: [],
+    title: urlData.bookName,
+    baseUrl: PDFViewerApplication.baseUrl,
   };
-
+  window.parent.postMessage({ type: 'saveHighlight', payload: newHighlight }, '*');
   addHighlights([newHighlight]);
 }
 
@@ -1600,7 +1693,7 @@ function addHighlights(newHighlights) {
 
   console.log(`${newHighlights.length} new highlight(s) added and saved.`);
 
-  const pagesToUpdate = [...new Set(newHighlights.map(h => h.pageNumber))];
+  const pagesToUpdate = [...new Set(newHighlights.map(h => h.pageNo))];
   pagesToUpdate.forEach(pageNum => {
     drawHighlightsOnPage(pageNum);
   });
@@ -1627,9 +1720,22 @@ async function drawHighlightsOnPage(pageNum) {
   // Get the page and its current viewport to calculate absolute positions
   const page = await pdfDoc.getPage(pageNum);
   const pageRect = pageContainer.getBoundingClientRect(); // Get current on-screen size
+  let urlData = getBookUrlData();
+  let shortUrl =    
+    "/books/" +
+    urlData.bookParent +
+    "/" +
+    urlData.language +
+    "/" +
+    urlData.bookName +
+    "/pdf/" +
+    urlData.pageNo;
+
 
   const highlightsToDraw = storedHighlights.filter(
-    h => h.pageNumber === pageNum
+    h => (h.pageNo === pageNum
+      && h.url
+      && h.url.includes(shortUrl))
   );
 
   highlightsToDraw.forEach(highlight => {
@@ -1673,7 +1779,7 @@ async function drawHighlightsOnPage(pageNum) {
     // Position it absolutely on the page, at the top-right of the highlight's bounding box.
     // The offsets (-10px) are to center the button on the corner.
     deleteBtn.style.top = `${(minTopPercent / 100) * pageRect.height - 10}px`;
-    deleteBtn.style.left = `${(maxRightPercent / 100) * pageRect.width - 10}px`;
+    deleteBtn.style.left = `${(maxRightPercent / 100) * pageRect.width}px`;
 
     group.appendChild(deleteBtn);
 
@@ -1704,9 +1810,11 @@ function clearHighlightsOnPage(pageNum) {
 function handleDeleteClick(event) {
   const target = event.target;
   if (target.classList.contains("delete-highlight-btn")) {
+    event.stopPropagation(); 
     const highlightId = target.dataset.highlightId;
     if (highlightId) {
       deleteHighlight(highlightId);
+      window.parent.postMessage({ type: 'deleteHighlight', payload: highlightId }, '*');
     }
   }
 }
@@ -1737,6 +1845,8 @@ async function setupResizeObserver() {
   await drawHighlightsOnPage(current_pageNumber);
   
 }
+
+
 async function addBookMark() {
   saveSelection();
   let bookMarksStr = localStorage.getItem("bookMarks");
