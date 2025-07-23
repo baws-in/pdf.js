@@ -1541,11 +1541,11 @@ async function shareButtonClick(isLongPressShare) {
           selectedText +
           "\n\nto read more please go to " +
           shortUrl;
-        //navigator.clipboard.writeText(selectedText);
+        navigator.clipboard.writeText(selectedText);
         genericShowPanel(panelMessageForText, 3000);
       } else {
         selectedText = shortUrl;
-        //navigator.clipboard.writeText(selectedText);
+        navigator.clipboard.writeText(selectedText);
         genericShowPanel(panelMessageForUrl, 3000);
       }
 

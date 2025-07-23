@@ -1594,7 +1594,7 @@
     font-size: 14px;
     line-height: 1;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    opacity: 0.6; /* Visible by default, but not intrusive */
+    opacity: 0.2; /* Visible by default, but not intrusive */
     transition: all 0.2s ease-in-out;
     pointer-events: auto; /* The button is the only interactive part */
     z-index: 10;
