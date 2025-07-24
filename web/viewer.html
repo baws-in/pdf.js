@@ -22,6 +22,7 @@ See https://github.com/adobe-type-tools/cmap-resources
 -->
 <html dir="ltr" mozdisallowselectionprint>
   <head>
+    <link rel="preconnect" href="https://assets.studyring.org" crossorigin>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <!--#if GENERIC || CHROME-->
@@ -563,32 +564,39 @@ See https://github.com/adobe-type-tools/cmap-resources
           <button class="btn btn col-2 responsive-font" type="button"  onclick="loadNotesPage()" hidden><i class="fal fa-comment-lines"></i></button>
         </div>
       </div>
+      <!-- Make sure you have Font Awesome loaded in your project for the icons to appear -->
       <div class="offcanvas offcanvas-bottom" tabindex="-1" aria-labelledby="voicePanelLabel" style="height: auto" id="voicePanel">
-        <!-- <div class="offcanvas-header">
-          <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-        </div> -->
-        <div class="offcanvas-body">
-          <!-- <button type="button" class="btn btn" data-toggle="modal" onclick="stopReading()">
-            <i class="fal fa-stop fa-5x"></i>
-          </button> -->
-          <div class="col-12 text-center">
-            <button type="button" class="btn btn" data-toggle="modal" onclick="prevParagraph()">
-              <i class="fad fa-angle-double-left fa-2x"></i>
-            </button>
-            <button type="button" class="btn btn" data-toggle="modal" onclick="selectRangeForReading()">
-              <i class="far fa-play fa-2x" id="audioPlayIcon"></i>
-            </button>
-            <button type="button" class="btn btn" data-toggle="modal" onclick="nextParagraph()">
-              <i class="fad fa-angle-double-right fa-2x"></i>
-            </button>
+          <div class="offcanvas-body">
+              <!-- Original Playback Controls -->
+              <!-- Added Speed Controls -->
+              <div class="col-12 text-center mt-3">
+                  <button type="button" class="btn btn" title="Decrease Speed" onclick="speedDecrease()">
+                      <i class="fas fa-minus-circle fa-2x"></i>
+                  </button>
+                  <span class="align-middle mx-3 font-weight-bold">Speed</span>
+                  <button type="button" class="btn btn" title="Increase Speed" onclick="speedIncrease()">
+                      <i class="fas fa-plus-circle fa-2x"></i>
+                  </button>
+              </div> 
+              <div class="col-12 text-center">
+                  <button type="button" class="btn btn" data-toggle="modal" onclick="prevParagraph()">
+                      <i class="fad fa-angle-double-left fa-2x"></i>
+                  </button>
+                  <button type="button" class="btn btn" data-toggle="modal" onclick="selectRangeForReading()">
+                      <i class="far fa-play fa-2x" id="audioPlayIcon"></i>
+                  </button>
+                  <button type="button" class="btn btn" data-toggle="modal" onclick="nextParagraph()">
+                      <i class="fad fa-angle-double-right fa-2x"></i>
+                  </button>
+              </div>
+              <!-- Original Voice Selector -->
+              <div class="col-12 text-center mt-3">
+                  <label for="selectVoices">Choose Voice:</label>
+                  <select name="selectVoices" id="selectVoices" onchange=""></select>
+              </div>
           </div>
-          <div class="col-12 text-center">
-            <!-- <button type="button" class="moreReadable">More Readable</button> -->
-            <label for="cars">Choose Voice:</label>
-            <select name="selectVoices" id="selectVoices" onchange=""></select>
-          </div>
-        </div>
       </div>
+
 
       <div class="offcanvas offcanvas-bottom" tabindex="-1" data-bs-scroll="true" data-bs-backdrop="false" aria-labelledby="dictionaryPanelLabel" style="height: auto" id="dictionaryPanel">
         <div class="offcanvas-body">

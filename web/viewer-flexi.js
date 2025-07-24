@@ -47,12 +47,18 @@ var audioMeta = {
   totalReadItems: 0,
   itemsToRead: [],
   currentPage: 0,
+  rate:0.95,
 };
+
+const SPEECH_RATE_STORAGE_KEY = 'userSpeechRate';
+const SILENT_AUDIO_SRC = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+let silentAudio = null;
+
+
 if ("speechSynthesis" in window) {
   var msg = new SpeechSynthesisUtterance();
   var synth = window.speechSynthesis;
-
-  
+  initializeSpeechRate();  
 }
 
 let wakeLock = null;
@@ -679,7 +685,7 @@ async function startReading(paramText) {
     // msg.voice = audioMeta.voices[10]; // Note: some voices don't support altering params
     //msg.voiceURI = 'native';
     msg.volume = 1; // 0 to 1
-    msg.rate = 0.95; // 0.1 to 10
+    msg.rate = audioMeta.rate; // 0.1 to 10
     msg.pitch = 1; //0 to 2
 
     let str = paramText.replace(/\*/g, "");
@@ -851,7 +857,13 @@ async function selectRangeForReading() {
     stopReading();
     setPlayIcon();
     PDFViewerApplication.eventBus._off("pagechanging", readFlippedPage);
+    disableBackgroundPlayback(); // We are done
     return;
+  }
+  if (!audioMeta.isSpeaking) {
+    // We are about to start speaking
+    //enableBackgroundPlayback();
+
   }
   PDFViewerApplication.eventBus._off("pagechanging", readFlippedPage);
   PDFViewerApplication.eventBus._on("pagechanging", readFlippedPage);
@@ -1849,36 +1861,6 @@ async function setupResizeObserver() {
 
 async function addBookMark() {
   saveSelection();
-  let bookMarksStr = localStorage.getItem("bookMarks");
-  let bookMarks = [];
-  if (bookMarksStr) {
-    bookMarks = JSON.parse(bookMarksStr);
-    if (bookMarks.length >= 30) {
-      // bookMarks.shift()
-    }
-  }
-  let urlData = getBookUrlData();
-  let shortUrl =
-    ("localhost" === window.location.hostname ? "" : window.location.hostname) +
-    "/books/" +
-    urlData.bookParent +
-    "/" +
-    urlData.language +
-    "/" +
-    urlData.bookName +
-    "/pdf/" +
-    urlData.pageNo;
-  let bookMark = {
-    url: shortUrl,
-    text: selectedText,
-    pageNo: urlData.pageNo,
-    context: [],
-    title: urlData.bookName,
-    baseUrl: PDFViewerApplication.baseUrl,
-  };
-  bookMarks.push(bookMark);
-  localStorage.setItem("bookMarks", JSON.stringify(bookMarks));
-  genericShowPanel("Selected text and current page saved as BookMark", 3000);
 }
 function getBookUrlData() {
   let text = PDFViewerApplication.baseUrl;
@@ -1892,4 +1874,159 @@ function getBookUrlData() {
       bookName: urlArr[urlArr.length - 1],
     };
   }
+}
+
+
+function enableBackgroundPlayback() {
+    if (silentAudio) {
+        console.log("Background playback is already enabled.");
+        return;
+    }
+
+    console.log("Enabling background playback...");
+    silentAudio = new Audio();
+    silentAudio.src = SILENT_AUDIO_SRC;
+    silentAudio.loop = true; // Loop the silent audio to keep the session active
+
+    // We must wait for user interaction before playing audio.
+    // The button click that calls this function serves as that interaction.
+    silentAudio.play().then(() => {
+        console.log("Silent audio is now playing.");
+        setupMediaSession();
+    }).catch(error => {
+        console.error("Could not play silent audio:", error);
+        // In case of error, reset the state.
+        silentAudio = null;
+    });
+}
+
+/**
+ * Disables background audio playback by stopping the silent audio
+ * and clearing the Media Session.
+ */
+function disableBackgroundPlayback() {
+    if (!silentAudio) {
+        console.log("Background playback is not enabled.");
+        return;
+    }
+
+    console.log("Disabling background playback...");
+    silentAudio.pause();
+    silentAudio.src = ''; // Release the audio source
+    silentAudio = null;
+
+    clearMediaSession();
+}
+
+/**
+ * Sets up the Media Session metadata to make the browser treat this
+ * page as a media-playing app. This is what shows up in the phone's
+ * notification shade.
+ */
+function setupMediaSession() {
+    if ('mediaSession' in navigator) {
+        console.log("Setting up Media Session...");
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: parent.document.title,
+            artist: 'BAWS.in',
+            album: "Dr. Babasaheb Ambedkar Writings and Speeches",
+            artwork: [
+                // Add a placeholder image for the media notification
+                { src: 'https://baws.in/baws_social_logo.png', sizes: '96x96', type: 'image/png' },
+                { src: 'https://baws.in/baws_social_logo.png', sizes: '128x128', type: 'image/png' },
+                { src: 'https://baws.in/baws_social_logo.png', sizes: '192x192', type: 'image/png' },
+                { src: 'https://baws.in/baws_social_logo.png', sizes: '256x256', type: 'image/png' },
+                { src: 'https://baws.in/baws_social_logo.png', sizes: '384x384', type: 'image/png' },
+                { src: 'https://baws.in/baws_social_logo.png', sizes: '512x512', type: 'image/png' },
+            ]
+        });
+
+        // Set up action handlers for media keys (play/pause from notification)
+        navigator.mediaSession.setActionHandler('play', () => {
+            console.log('Media Session: Play action received.');
+            // You could add logic here to resume speech synthesis if it was paused.
+            // For simplicity, we'll just log it.
+        });
+        navigator.mediaSession.setActionHandler('pause', () => {
+            console.log('Media Session: Pause action received.');
+            // This is a good place to stop speech synthesis.
+            speechSynthesis.cancel();
+        });
+    }
+}
+
+/**
+ * Clears the Media Session metadata.
+ */
+function clearMediaSession() {
+    if ('mediaSession' in navigator) {
+        console.log("Clearing Media Session...");
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+    }
+}
+
+// Clean up when the user navigates away from the page
+window.addEventListener('beforeunload', () => {
+    disableBackgroundPlayback();
+    if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+    }
+});
+
+
+/**
+ * Initializes the speech rate from localStorage.
+ * This function should be called when your application or audio player loads.
+ */
+function initializeSpeechRate() {
+    const savedRate = localStorage.getItem(SPEECH_RATE_STORAGE_KEY);
+    if (savedRate) {
+        // If a rate is found in storage, parse it and set it.
+        audioMeta.rate = parseFloat(savedRate);
+    } else {
+        // Otherwise, use the default rate of 1.
+        audioMeta.rate = 0.95;
+    }
+    console.log("Speech rate initialized to:", audioMeta.rate);
+    // You might want to update a UI element to show the current rate here.
+}
+
+/**
+ * Increases the speech rate by 0.1, with a maximum limit of 10.
+ * It persists the new rate to localStorage.
+ */
+function speedIncrease() {
+    // Set a maximum rate of 10.
+    const maxRate = 10;
+    // Use 0.1 as the increment step.
+    const newRate = Math.min(maxRate, parseFloat((audioMeta.rate + 0.1).toFixed(2)));
+
+    if (audioMeta.rate !== newRate) {
+        audioMeta.rate = newRate;
+        localStorage.setItem(SPEECH_RATE_STORAGE_KEY, audioMeta.rate);
+        console.log("Speech rate increased to:", audioMeta.rate);
+        // If speech is currently active, you might need to stop and restart it
+        // with the new rate for the change to take effect immediately.
+    }
+}
+
+/**
+ * Decreases the speech rate by 0.1, with a minimum limit of 0.1.
+ * It persists the new rate to localStorage.
+ */
+function speedDecrease() {
+    // Set a minimum rate of 0.1.
+    const minRate = 0.1;
+    // Use 0.1 as the decrement step.
+    const newRate = Math.max(minRate, parseFloat((audioMeta.rate - 0.1).toFixed(2)));
+
+    if (audioMeta.rate !== newRate) {
+        audioMeta.rate = newRate;
+        localStorage.setItem(SPEECH_RATE_STORAGE_KEY, audioMeta.rate);
+        console.log("Speech rate decreased to:", audioMeta.rate);
+        // If speech is currently active, you might need to stop and restart it
+        // with the new rate for the change to take effect immediately.
+    }
 }
