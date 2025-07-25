@@ -51,7 +51,7 @@ var audioMeta = {
 };
 
 const SPEECH_RATE_STORAGE_KEY = 'userSpeechRate';
-const SILENT_AUDIO_SRC = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+const SILENT_AUDIO_SRC = "https://baws.in/reader/silence.mp3";
 let silentAudio = null;
 
 
@@ -202,6 +202,7 @@ $(document).ready(function () {
         console.log(synth)
       });*/
       PDFViewerApplication.eventBus._on("pagerendered", evt => {
+        postBawsMsg("pageRendered");
         setupResizeObserver();
       });
       PDFViewerApplication.eventBus._on("pagechanging", evt => {
@@ -862,7 +863,7 @@ async function selectRangeForReading() {
   }
   if (!audioMeta.isSpeaking) {
     // We are about to start speaking
-    //enableBackgroundPlayback();
+    await enableBackgroundPlayback();
 
   }
   PDFViewerApplication.eventBus._off("pagechanging", readFlippedPage);
@@ -1681,6 +1682,7 @@ async function saveSelection() {
     context: [],
     title: urlData.bookName,
     baseUrl: PDFViewerApplication.baseUrl,
+    shared: false,
   };
   window.parent.postMessage({ type: 'saveHighlight', payload: newHighlight }, '*');
   addHighlights([newHighlight]);
@@ -1877,12 +1879,12 @@ function getBookUrlData() {
 }
 
 
-function enableBackgroundPlayback() {
+async function enableBackgroundPlayback() {
     if (silentAudio) {
         console.log("Background playback is already enabled.");
         return;
     }
-
+    await requestWakeLock();
     console.log("Enabling background playback...");
     silentAudio = new Audio();
     silentAudio.src = SILENT_AUDIO_SRC;
@@ -1904,12 +1906,12 @@ function enableBackgroundPlayback() {
  * Disables background audio playback by stopping the silent audio
  * and clearing the Media Session.
  */
-function disableBackgroundPlayback() {
+async function disableBackgroundPlayback() {
     if (!silentAudio) {
         console.log("Background playback is not enabled.");
         return;
     }
-
+    await releaseWakeLock();
     console.log("Disabling background playback...");
     silentAudio.pause();
     silentAudio.src = ''; // Release the audio source
@@ -1968,8 +1970,8 @@ function clearMediaSession() {
 }
 
 // Clean up when the user navigates away from the page
-window.addEventListener('beforeunload', () => {
-    disableBackgroundPlayback();
+window.addEventListener('beforeunload', async () => {
+    await disableBackgroundPlayback();
     if (speechSynthesis.speaking) {
         speechSynthesis.cancel();
     }
