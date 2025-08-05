@@ -1604,3 +1604,155 @@
     opacity: 1;
     transform: scale(1.1);
 }/* --- END CHANGED --- */
+
+
+/* Custom styles for the voice control panel */
+@keyframes slideUpFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* The main floating panel container */
+#voicePanel.hidden {
+        opacity: 0;
+        transform: translateY(100%) translateX(-50%);
+        pointer-events: none;
+    }
+
+    #voicePanel {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        width: 90%;
+        max-width: 700px;
+        padding: 12px 20px;
+        background-color: rgba(45, 49, 53, 0.75);
+        backdrop-filter: blur(10px) saturate(120%);
+        -webkit-backdrop-filter: blur(10px) saturate(120%);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        z-index: 1050;
+        color: #f8f9fa;
+        opacity: 1;
+        transform: translateY(0) translateX(-50%);
+        transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+
+    /* Close Button */
+    .btn-close-player {
+        position: absolute;
+        top: 8px;
+        right: 12px;
+        background: rgba(0,0,0,0.2);
+        border: none;
+        color: #fff;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        font-size: 16px;
+        line-height: 24px;
+        text-align: center;
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s ease, background-color 0.2s ease;
+    }
+    .btn-close-player:hover {
+        opacity: 1;
+        background-color: rgba(0,0,0,0.4);
+    }
+    
+    /* === DESKTOP LAYOUT === */
+    .player-grid {
+        display: grid;
+        width: 100%;
+        grid-template-areas:
+            "speed  playback"
+            "voice  voice";
+        grid-template-columns: auto auto; /* UPDATED */
+        justify-content: center; /* UPDATED */
+        align-items: center;
+        gap: 0.75rem 1rem;
+    }
+    
+    .speed-controls { grid-area: speed; justify-content: center; }
+    .playback-controls { grid-area: playback; justify-content: center; }
+    .voice-panel-group {
+        grid-area: voice;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+    }
+    .voice-select-wrapper { width: 70%; max-width: 400px; }
+
+    /* Generic styles for controls */
+    .control-group { display: flex; align-items: center; }
+    .voice-label { font-weight: 500; color: #ced4da; margin: 0 1rem; }
+    
+    #selectVoices {
+        width: 100%;
+        background-color: rgba(20, 20, 20, 0.5);
+        color: #f8f9fa;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 0.3rem 2rem 0.3rem 0.75rem;
+        -webkit-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ced4da' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.5rem center;
+        background-size: 16px 12px;
+    }
+
+    /* Button and Label styles */
+    .control-group .btn { background: transparent; color: #adb5bd; border: none; padding: 5px; transition: color 0.2s ease, transform 0.2s ease; }
+    .control-group .btn:hover { color: #ffffff; transform: scale(1.1); }
+    .control-group .btn:focus { box-shadow: none; }
+    .btn-play { background-color: #0d6efd; color: #ffffff; border-radius: 50%; width: 50px; height: 50px; margin: 0 1rem; display: inline-flex; align-items: center; justify-content: center; }
+    .btn-play:hover { background-color: #0b5ed7; color: #ffffff; transform: scale(1.05); }
+    .btn-play .fa-play, .btn-play .fa-pause { font-size: 1.25rem; }
+    .control-group .fa-2x { font-size: 1.5rem; }
+    .speed-label { font-weight: 500; color: #ced4da; }
+
+
+    /* === MOBILE LAYOUT === */
+    @media (max-width: 768px) {
+        #voicePanel {
+            width: 100%;
+            max-width: 100%;
+            bottom: 0;
+            left: 50%;
+            border-radius: 16px 16px 0 0; 
+            padding: 8px 15px 15px; /* UPDATED */
+            transform: translateY(0) translateX(-50%);
+        }
+
+        .player-grid {
+            grid-template-areas:
+                "playback"
+                "speed"
+                "voice-label"
+                "voice-select";
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+        }
+        
+        .voice-panel-group { display: contents; }
+        
+        .voice-label { grid-area: voice-label; text-align: center; margin: 0.25rem 0 0; }
+        .voice-select-wrapper { grid-area: voice-select; width: 100%; max-width: 100%; }
+
+        .speed-controls, .playback-controls { justify-content: center; }
+
+        /* ADDED this rule */
+        .speed-controls {
+            margin-top: -0.25rem;
+        }
+    }

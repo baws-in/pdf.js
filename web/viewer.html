@@ -553,8 +553,8 @@ See https://github.com/adobe-type-tools/cmap-resources
       <!---->
       <div class="col-12 fixed-bottom text-center responsive-font" style="background-color: lightslategray; border: 2px solid white;">
         <div class="row">
-          <button class="btn btn col-2 responsive-font" type="button"  onclick="loadSearchPage()">&#128281;</button>
-          <button class="btn btn col-2 responsive-font" type="button"  data-bs-toggle="offcanvas" data-bs-target="#voicePanel" aria-controls="voicePanel">
+          <button id="leaveButton" class="btn btn col-2 responsive-font" type="button"  onclick="loadSearchPage()">&#128281;</button>
+          <button id="voiceButton" class="btn btn col-2 responsive-font" type="button"  onclick="showVoicePanel()">
             <i class="fal fa-headphones-alt responsive-font"></i>
           </button>
           <button class="btn btn col-2 responsive-font" type="button"  onclick="openPrevPage()"><i class="fal fa-chevron-left"> </i></button>
@@ -565,36 +565,41 @@ See https://github.com/adobe-type-tools/cmap-resources
         </div>
       </div>
       <!-- Make sure you have Font Awesome loaded in your project for the icons to appear -->
-      <div class="offcanvas offcanvas-bottom" tabindex="-1" aria-labelledby="voicePanelLabel" style="height: auto" id="voicePanel">
-          <div class="offcanvas-body">
-              <!-- Original Playback Controls -->
-              <!-- Added Speed Controls -->
-              <div class="col-12 text-center mt-3">
-                  <button type="button" class="btn btn" title="Decrease Speed" onclick="speedDecrease()">
-                      <i class="fas fa-minus-circle fa-2x"></i>
-                  </button>
-                  <span class="align-middle mx-3 font-weight-bold">Speed</span>
-                  <button type="button" class="btn btn" title="Increase Speed" onclick="speedIncrease()">
-                      <i class="fas fa-plus-circle fa-2x"></i>
-                  </button>
-              </div> 
-              <div class="col-12 text-center">
-                  <button type="button" class="btn btn" data-toggle="modal" onclick="prevParagraph()">
-                      <i class="fad fa-angle-double-left fa-2x"></i>
-                  </button>
-                  <button type="button" class="btn btn" data-toggle="modal" onclick="selectRangeForReading()">
-                      <i class="far fa-play fa-2x" id="audioPlayIcon"></i>
-                  </button>
-                  <button type="button" class="btn btn" data-toggle="modal" onclick="nextParagraph()">
-                      <i class="fad fa-angle-double-right fa-2x"></i>
-                  </button>
-              </div>
-              <!-- Original Voice Selector -->
-              <div class="col-12 text-center mt-3">
-                  <label for="selectVoices">Choose Voice:</label>
-                  <select name="selectVoices" id="selectVoices" onchange=""></select>
-              </div>
-          </div>
+      <div id="voicePanel" class="hidden">
+        <button type="button" class="btn-close-player" title="Close Panel" onclick="hideVoicePanel()">
+            &times;
+        </button>
+
+        <div class="player-grid">
+            <div class="control-group speed-controls">
+                <button type="button" class="btn" title="Decrease Speed" onclick="speedDecrease()">
+                    <i class="fas fa-minus-circle fa-2x"></i>
+                </button>
+                <span class="speed-label mx-2">Speed</span>
+                <button type="button" class="btn" title="Increase Speed" onclick="speedIncrease()">
+                    <i class="fas fa-plus-circle fa-2x"></i>
+                </button>
+            </div>
+
+            <div class="control-group playback-controls">
+                <button type="button" class="btn" title="Previous Paragraph" onclick="prevParagraph()">
+                    <i class="fad fa-angle-double-left fa-2x"></i>
+                </button>
+                <button type="button" class="btn btn-play" title="Play/Pause" onclick="selectRangeForReading()">
+                    <i class="far fa-play" id="audioPlayIcon"></i>
+                </button>
+                <button type="button" class="btn" title="Next Paragraph" onclick="nextParagraph()">
+                    <i class="fad fa-angle-double-right fa-2x"></i>
+                </button>
+            </div>
+
+            <div class="voice-panel-group">
+                <label for="selectVoices" class="voice-label">Voice:</label>
+                <div class="voice-select-wrapper">
+                    <select name="selectVoices" id="selectVoices" onchange=""></select>
+                </div>
+            </div>
+        </div>
       </div>
 
 

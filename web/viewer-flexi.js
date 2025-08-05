@@ -53,7 +53,7 @@ var audioMeta = {
 const SPEECH_RATE_STORAGE_KEY = 'userSpeechRate';
 const SILENT_AUDIO_SRC = "https://baws.in/reader/silence.mp3";
 let silentAudio = null;
-
+var voicePanel = document.getElementById('voicePanel');
 
 if ("speechSynthesis" in window) {
   var msg = new SpeechSynthesisUtterance();
@@ -64,6 +64,7 @@ if ("speechSynthesis" in window) {
 let wakeLock = null;
 
 $(document).ready(function () {
+  voicePanel = document.getElementById('voicePanel');
   $(".moreReadable").click(function (event) {
     // moreReadable = !moreReadable;
     // if (moreReadable) {
@@ -166,6 +167,12 @@ $(document).ready(function () {
       isBookLoaded = true;
       
       const { onePageRendered } = PDFViewerApplication.pdfViewer;
+      // 1. Find the element by its ID
+      const elementToFocus = document.getElementById('viewer');
+
+      // 2. Set focus on the element
+      // Use optional chaining (?.) to avoid an error if the element isn't found
+      elementToFocus?.focus();
 
       onePageRendered.then(data => {
         if (isOnMobile()) {
@@ -190,6 +197,7 @@ $(document).ready(function () {
       });
 
       postBawsMsg("pageChanged");
+
       this._isPagesLoaded = true;
       viewer = document.getElementById("viewer");
       viewer.addEventListener("click", handleDeleteClick);
@@ -918,8 +926,10 @@ async function selectRangeForReading() {
                 final_str = chanakya2unicodeEx(final_str);
               }
               var ignore_height = 600;
+              var heightTolerance = 0.05
               if (PDFViewerApplication.baseUrl.includes("/MR/")) {
                 ignore_height = 2840;
+                heightTolerance = .13
                 if (
                   first_element_height > 2700 &&
                   first_element_height < 2840
@@ -927,9 +937,10 @@ async function selectRangeForReading() {
                   ignore_height = 2700;
                 }
               }
-              if (
-                Math.abs(textItem.height - prevHeight) >= 1 &&
-                textItem.height > 0
+              
+
+              if (textItem.height > 0 && textItem.height > 0 &&
+                Math.abs(textItem.height - prevHeight)/prevHeight >= heightTolerance 
               ) {
                 strBuf.push("\n ");
               }
@@ -1092,11 +1103,29 @@ function setPlayIcon() {
     }
   }
 }
+// --- Function to HIDE the panel ---
 function hideVoicePanel() {
-  var myOffcanvas = document.getElementById("voicePanel");
-  let openedCanvas = bootstrap.Offcanvas.getInstance(myOffcanvas);
-  openedCanvas.hide();
+    voicePanel.classList.add('hidden');
 }
+
+// --- Function to SHOW the panel ---
+// Call this from the button that opens your reader controls
+function showVoicePanel() {
+    voicePanel.classList.remove('hidden');
+}
+document.addEventListener('mousedown', function(event) {
+    // Don't do anything if the panel is already hidden
+    if (voicePanel.classList.contains('hidden')) {
+        return;
+    }
+
+    // Check if the click was outside the voicePanel
+    // and also not on a button that is MEANT to open the panel
+    // (You should add a class like 'opens-voice-panel' to your trigger button)
+    if (!voicePanel.contains(event.target) && !event.target.closest('.opens-voice-panel')) {
+        hideVoicePanel();
+    }
+});
 
 //audio end
 
@@ -1369,7 +1398,9 @@ async function shareBookPageContent(
         }
       }
     }
-
+    if (window.getSelection) {
+      window.getSelection().removeAllRanges();
+    }
     var qrCode = null;
     var canvas = null;
     if ("pdf" == window.VIEW_MODE) {
@@ -1628,7 +1659,11 @@ async function saveSelection() {
 
   // 2. Merge rects within each line
   const mergedRects = [];
-  const H_TOLERANCE = 5; // Horizontal tolerance in pixels
+  var H_TOLERANCE = 5; // Horizontal tolerance in pixels
+
+  if (PDFViewerApplication.baseUrl.includes("/MR/")) {
+    H_TOLERANCE = 50;
+  }
 
   for (const lineRects of lines.values()) {
       lineRects.sort((a, b) => a.left - b.left);
@@ -1860,9 +1895,38 @@ async function setupResizeObserver() {
   
 }
 
+async function disableBookMarkButtonFor10Seconds() {
+  // 1. Get the button element by its ID
+  const bookmarkButton = document.getElementById('bookMark');
+
+  // Return early if the button doesn't exist to avoid errors
+  if (!bookmarkButton) {
+    console.error("Button with id 'bookMark' not found.");
+    return;
+  }
+
+  // 2. Disable the button
+  bookmarkButton.disabled = true;  
+
+  // 3. Set a timer to re-enable the button after 30 seconds (30000 milliseconds)
+  setTimeout(() => {
+    // 4. Re-enable the button
+    bookmarkButton.disabled = false;   
+       
+    
+  }, 10000); 
+}
 
 async function addBookMark() {
+  // first disable the bookmark button
+  disableBookMarkButtonFor10Seconds();
   saveSelection();
+  if (window.getSelection) {
+    window.getSelection().removeAllRanges();
+  } else if (document.selection) {
+    // For older versions of IE
+    document.selection.empty();
+  }
 }
 function getBookUrlData() {
   let text = PDFViewerApplication.baseUrl;
