@@ -34,6 +34,7 @@ var selectedText = "";
 const RENDER_SCALE = 1.5;
 let storedHighlights = []; // This array will store our highlight coordinates
 let viewer = null;
+let highlightDrawSignal = 2;
 
 var moreReadable = true;
 var isBookLoaded = false;
@@ -489,7 +490,7 @@ function openNextPage() {
   }
   audioMeta.isSpeaking = false;
   PDFViewerApplication.pdfViewer.nextPage();
-  pageFlipTransform();
+  //pageFlipTransform();
   //PDFViewerApplication.pdfViewer.scrollMode=3
   //  PDFViewerApplication.pdfViewer.spreadMode=1
   // PDFViewerApplication.eventBus.dispatch("scrollmodechanged", { source: PDFViewerApplication.pdfViewer, mode:3 });
@@ -513,7 +514,7 @@ function openPrevPage() {
     clearInterval(scrolllerWatch);
   }
   PDFViewerApplication.pdfViewer.previousPage();
-  pageFlipTransform();
+  //pageFlipTransform();
 }
 function isOnMobile() {
   let check = false;
@@ -1639,7 +1640,10 @@ async function saveSelection() {
 
   // 1. Group rects by line (using the 'top' coordinate with a tolerance)
   const lines = new Map();
-  const V_TOLERANCE = 5; // Vertical tolerance in pixels
+  var V_TOLERANCE = 5; // Vertical tolerance in pixels
+  if (PDFViewerApplication.baseUrl.includes("/MR/")) {
+    V_TOLERANCE = 20;
+  }
 
   for (const rect of selectionRects) {
       if (rect.width <= 1) continue; // Filter out tiny or zero-width rects
