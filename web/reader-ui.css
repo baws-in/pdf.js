@@ -743,6 +743,240 @@ html.rui-chrome-hidden .rui-bottom {
   background: var(--rui-hover) !important;
 }
 
+/* ---------- Listen player ---------- */
+
+/* The old voice panel stays in the page (its voice list is what the
+   reading engine uses) but is never shown in the new UI. */
+html.rui #voicePanel {
+  display: none !important;
+}
+
+.rui-player {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rui-player-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rui-player-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rui-player-detail {
+  font-size: 12px;
+  color: var(--rui-muted);
+}
+
+.rui-player-progress {
+  display: grid;
+  grid-template-columns: repeat(var(--rui-segments, 1), minmax(0, 1fr));
+  gap: 3px;
+  min-height: 4px;
+}
+
+.rui-segment {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rui-line);
+}
+
+.rui-segment.rui-done {
+  background: var(--rui-accent);
+}
+
+.rui-segment.rui-current {
+  background: var(--rui-accent);
+  opacity: 0.55;
+}
+
+.rui-segment.rui-bar {
+  background: linear-gradient(
+    to right,
+    var(--rui-accent) var(--rui-fill, 0%),
+    var(--rui-line) var(--rui-fill, 0%)
+  );
+}
+
+.rui-player-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.rui-player-transport .rui-icon-btn {
+  color: var(--rui-muted);
+}
+
+.rui-player-transport .rui-big {
+  width: 52px;
+  height: 52px;
+  border-radius: 26px;
+  color: var(--rui-ink);
+}
+
+.rui-player-transport .rui-big .rui-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.rui-play {
+  width: 72px;
+  height: 72px;
+  border-radius: 50% !important;
+  background: var(--rui-ink) !important;
+  color: var(--rui-surface-solid) !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rui-play .rui-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.rui-play-small {
+  width: 44px;
+  height: 44px;
+}
+
+.rui-play-small .rui-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.rui-player-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rui-option {
+  min-height: 56px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: var(--rui-tile);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rui-option-label {
+  font-size: 10px;
+  color: var(--rui-muted);
+  text-align: center;
+}
+
+.rui-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rui-stepper button {
+  width: 36px;
+  height: 36px;
+  font-size: 20px !important;
+  color: var(--rui-muted) !important;
+}
+
+.rui-select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--rui-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  text-align-last: center;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.rui-select:focus-visible {
+  outline: 2px solid var(--rui-accent);
+  border-radius: 8px;
+}
+
+/* Mini player: stays while listening, above the bottom bar (or the screen
+   edge when the controls are hidden). */
+.rui-mini {
+  position: fixed;
+  inset-inline: 10px;
+  bottom: calc(var(--rui-bottom-h) + 10px + env(safe-area-inset-bottom, 0px));
+  z-index: 1001;
+  max-width: 560px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 8px;
+  border-radius: 30px;
+  background: var(--rui-surface-solid);
+  border: 1px solid var(--rui-line);
+  box-shadow: var(--rui-shadow);
+  font-family: var(--rui-font);
+  color: var(--rui-ink);
+  transition: bottom 0.22s ease;
+}
+
+.rui-mini[hidden] {
+  display: none;
+}
+
+html.rui-chrome-hidden .rui-mini {
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.rui-mini button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.rui-mini-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0 6px !important;
+  text-align: start;
+}
+
+.rui-mini-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.rui-mini-detail {
+  font-size: 11px;
+  color: var(--rui-muted);
+}
+
 /* ---------- Larger screens ---------- */
 
 @media (min-width: 900px) {

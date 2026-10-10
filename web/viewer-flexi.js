@@ -621,6 +621,7 @@ function updateVoiceSelector() {
     }
     setMsgVoice(audioMeta.voices[voiceToSelect]);
   }
+  document.dispatchEvent(new CustomEvent("baws:voiceschange"));
 }
 
 // Incremented on every stop/start so "end" events from a cancelled utterance
@@ -771,6 +772,16 @@ async function startNodeReading(contentNode, startIndex) {
     for (; i < contentNode.length; ) {
       if (audioMeta.isSpeaking) {
         audioMeta.currentPara = i;
+        // Lets the new reader UI (reader-ui.js) show reading progress.
+        document.dispatchEvent(
+          new CustomEvent("baws:readingprogress", {
+            detail: {
+              page: audioMeta.currentPage,
+              index: i,
+              total: contentNode.length,
+            },
+          })
+        );
 
         var toRead = contentNode[i];
         let currentReadIndex = i;

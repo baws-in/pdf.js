@@ -61,6 +61,16 @@
     copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
     speak:
       '<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>',
+    play: '<path d="M7 4.5v15l12.5-7.5z" fill="currentColor" stroke="none"/>',
+    pause:
+      '<rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" stroke="none"/>',
+    prevSentence:
+      '<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/>',
+    nextSentence:
+      '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
+    prevPage: '<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>',
+    nextPage: '<path d="m13 17 5-5-5-5M6 17l5-5-5-5"/>',
+    expand: '<path d="m18 15-6-6-6 6"/>',
   };
 
   function icon(name) {
@@ -715,6 +725,7 @@
   function openSheet(title, build) {
     closeSheet(true);
     hideSelectionBar();
+    player.sheet = null;
     const returnFocus = document.activeElement;
     const scrim = el("div", "rui-scrim");
     const sheet = el("div", "rui-sheet", {
@@ -749,6 +760,7 @@
     sheet.addEventListener("keydown", onKey);
 
     sheetOpen = { scrim, sheet, returnFocus };
+    updatePlayer();
     requestAnimationFrame(() => {
       scrim.classList.add("rui-open");
       sheet.classList.add("rui-open");
@@ -765,6 +777,8 @@
     }
     const { scrim, sheet, returnFocus } = sheetOpen;
     sheetOpen = null;
+    player.sheet = null; // the player's controls live in this sheet, if any
+    updatePlayer();
     if (immediate) {
       scrim.remove();
       sheet.remove();
@@ -1193,6 +1207,366 @@
   }
 
   // ---------------------------------------------------------------------
+  // Listen player
+  // ---------------------------------------------------------------------
+  //
+  // A front end for the read-aloud engine in viewer-flexi.js
+  // (selectRangeForReading, prev/nextParagraph, speedIncrease/Decrease,
+  // openPageForReading). It follows the engine through the
+  // "baws:speakingchange" and "baws:readingprogress" events.
+
+  const SLEEP_OPTIONS = [
+    { value: "off", label: "Off" },
+    { value: "15", label: "15 minutes" },
+    { value: "30", label: "30 minutes" },
+    { value: "60", label: "1 hour" },
+    { value: "chapter", label: "End of chapter" },
+  ];
+
+  const player = {
+    session: false, // the reader has used the player since opening the book
+    progress: { page: 0, index: 0, total: 0 },
+    sheet: null, // element refs while the player sheet is open
+    mini: null,
+    sleepMode: "off",
+    sleepTimer: null,
+    sleepChapterEnd: 0,
+  };
+
+  function isSpeaking() {
+    return !!window.audioMeta?.isSpeaking;
+  }
+
+  function stopListening() {
+    if (isSpeaking()) {
+      window.selectRangeForReading?.(); // toggles reading off
+    }
+  }
+
+  function togglePlay() {
+    player.session = true;
+    // Starts reading the current page, resumes the current sentence if
+    // reading was paused on this page, or pauses.
+    window.selectRangeForReading?.();
+  }
+
+  function playerPage(direction) {
+    if (isSpeaking()) {
+      // Turns the page and carries on reading there.
+      window.openPageForReading?.(direction === "next" ? "NEXT" : "PREV");
+    } else {
+      navigate(direction);
+    }
+  }
+
+  function playerSentence(direction) {
+    player.session = true;
+    if (direction === "next") {
+      window.nextParagraph?.();
+    } else {
+      window.prevParagraph?.();
+    }
+  }
+
+  function changeSpeed(direction) {
+    if (direction > 0) {
+      window.speedIncrease?.();
+    } else {
+      window.speedDecrease?.();
+    }
+    updatePlayer();
+  }
+
+  function formatRate() {
+    const rate = window.audioMeta?.rate || 1;
+    return `${Number(rate.toFixed(2))}×`;
+  }
+
+  function setSleep(mode) {
+    clearTimeout(player.sleepTimer);
+    player.sleepTimer = null;
+    player.sleepMode = mode;
+    player.sleepChapterEnd = 0;
+    if (mode === "chapter") {
+      player.sleepChapterEnd = outlinePath(currentPage()).at(-1)?.end || 0;
+    } else if (mode !== "off") {
+      player.sleepTimer = setTimeout(
+        () => {
+          player.sleepMode = "off";
+          if (isSpeaking()) {
+            stopListening();
+            toast("Sleep timer: stopped reading.");
+          }
+          updatePlayer();
+        },
+        Number(mode) * 60 * 1000
+      );
+    }
+    updatePlayer();
+  }
+
+  function playerStatus() {
+    const { page, index, total } = player.progress;
+    const speaking = isSpeaking();
+    // When paused, Play resumes the sentence only on the same page; on
+    // another page it starts that page from the top.
+    if (total > 0 && page && (speaking || page === currentPage())) {
+      const where = `Sentence ${Math.min(index + 1, total)} of ${total}`;
+      return speaking
+        ? {
+            title: `Reading page ${page}`,
+            detail: `${where} · turns pages automatically`,
+          }
+        : { title: `Paused on page ${page}`, detail: where };
+    }
+    return {
+      title: `Listen to page ${currentPage()}`,
+      detail: "Reads aloud from the top of the page.",
+    };
+  }
+
+  function voiceSource() {
+    return document.getElementById("selectVoices");
+  }
+
+  function openPlayerSheet() {
+    openSheet("Listen", body => {
+      body.classList.add("rui-player");
+      // Static markup (icons and fixed labels only).
+      // eslint-disable-next-line no-unsanitized/property
+      body.innerHTML =
+        '<div class="rui-player-status"><span class="rui-player-title"></span>' +
+        '<span class="rui-player-detail"></span></div>' +
+        '<div class="rui-player-progress" aria-hidden="true"></div>' +
+        '<div class="rui-player-transport">' +
+        `<button type="button" class="rui-icon-btn" data-rui="prevPage" aria-label="Previous page" title="Previous page">${icon(
+          "prevPage"
+        )}</button>` +
+        `<button type="button" class="rui-icon-btn rui-big" data-rui="prevSentence" aria-label="Previous sentence" title="Previous sentence">${icon(
+          "prevSentence"
+        )}</button>` +
+        '<button type="button" class="rui-play" data-rui="play"></button>' +
+        `<button type="button" class="rui-icon-btn rui-big" data-rui="nextSentence" aria-label="Next sentence" title="Next sentence">${icon(
+          "nextSentence"
+        )}</button>` +
+        `<button type="button" class="rui-icon-btn" data-rui="nextPage" aria-label="Next page" title="Next page">${icon(
+          "nextPage"
+        )}</button>` +
+        "</div>" +
+        '<div class="rui-player-options">' +
+        '<div class="rui-option"><span class="rui-option-label" id="ruiSpeedLabel">Speed</span>' +
+        '<div class="rui-stepper" role="group" aria-labelledby="ruiSpeedLabel">' +
+        '<button type="button" data-rui="slower" aria-label="Slower">−</button>' +
+        '<span data-rui="rate" aria-live="polite"></span>' +
+        '<button type="button" data-rui="faster" aria-label="Faster">+</button>' +
+        "</div></div>" +
+        '<label class="rui-option"><span class="rui-option-label">Voice</span>' +
+        '<select class="rui-select" data-rui="voice"></select></label>' +
+        '<label class="rui-option"><span class="rui-option-label">Sleep timer</span>' +
+        '<select class="rui-select" data-rui="sleep"></select></label>' +
+        "</div>";
+      const q = name => body.querySelector(`[data-rui="${name}"]`);
+      q("prevPage").addEventListener("click", () => playerPage("prev"));
+      q("nextPage").addEventListener("click", () => playerPage("next"));
+      q("prevSentence").addEventListener("click", () => playerSentence("prev"));
+      q("nextSentence").addEventListener("click", () => playerSentence("next"));
+      q("play").addEventListener("click", togglePlay);
+      q("slower").addEventListener("click", () => changeSpeed(-1));
+      q("faster").addEventListener("click", () => changeSpeed(1));
+
+      const sleep = q("sleep");
+      for (const option of SLEEP_OPTIONS) {
+        const node = el("option", "", { value: option.value });
+        node.textContent = option.label;
+        sleep.append(node);
+      }
+      sleep.addEventListener("change", () => setSleep(sleep.value));
+
+      const voice = q("voice");
+      voice.addEventListener("change", () => {
+        // The engine's own (hidden) voice list stores the choice.
+        const source = voiceSource();
+        if (!source) {
+          return;
+        }
+        source.value = voice.value;
+        source.dispatchEvent(new Event("change"));
+        if (isSpeaking()) {
+          window.restartCurrentSentence?.();
+        }
+      });
+
+      player.sheet = {
+        root: body,
+        title: body.querySelector(".rui-player-title"),
+        detail: body.querySelector(".rui-player-detail"),
+        progress: body.querySelector(".rui-player-progress"),
+        play: q("play"),
+        rate: q("rate"),
+        voice,
+        sleep,
+      };
+      renderVoiceOptions();
+      updatePlayer();
+    });
+  }
+
+  function renderVoiceOptions() {
+    const select = player.sheet?.voice;
+    if (!select) {
+      return;
+    }
+    const source = voiceSource();
+    select.replaceChildren();
+    if (!source || !source.options.length) {
+      const none = el("option", "", { value: "" });
+      none.textContent = "Default voice";
+      select.append(none);
+      select.disabled = true;
+      return;
+    }
+    select.disabled = false;
+    for (const option of source.options) {
+      const copy = el("option", "", { value: option.value });
+      copy.textContent = option.textContent;
+      select.append(copy);
+    }
+    select.value = source.value;
+  }
+
+  function renderProgress(container) {
+    const { index, total } = player.progress;
+    container.replaceChildren();
+    if (!total) {
+      return;
+    }
+    if (total <= 30) {
+      container.style.setProperty("--rui-segments", total);
+      for (let i = 0; i < total; i++) {
+        const segment = el("span", "rui-segment");
+        if (i < index) {
+          segment.classList.add("rui-done");
+        } else if (i === index) {
+          segment.classList.add("rui-current");
+        }
+        container.append(segment);
+      }
+    } else {
+      container.style.setProperty("--rui-segments", 1);
+      const bar = el("span", "rui-segment rui-bar");
+      bar.style.setProperty("--rui-fill", `${((index + 1) / total) * 100}%`);
+      container.append(bar);
+    }
+  }
+
+  function setPlayButton(button) {
+    const speaking = isSpeaking();
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    button.innerHTML = icon(speaking ? "pause" : "play");
+    button.setAttribute("aria-label", speaking ? "Pause" : "Play");
+    button.title = speaking ? "Pause" : "Play";
+  }
+
+  function updatePlayer() {
+    const status = playerStatus();
+    const sheet = player.sheet;
+    if (sheet) {
+      sheet.title.textContent = status.title;
+      sheet.detail.textContent = status.detail;
+      renderProgress(sheet.progress);
+      setPlayButton(sheet.play);
+      sheet.rate.textContent = formatRate();
+      sheet.sleep.value = player.sleepMode;
+    }
+    updateMiniPlayer(status);
+  }
+
+  function buildMiniPlayer() {
+    const mini = el("div", "rui-mini", {
+      role: "region",
+      "aria-label": "Audio reader",
+      hidden: "",
+    });
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    mini.innerHTML =
+      '<button type="button" class="rui-play rui-play-small" data-rui="play"></button>' +
+      '<button type="button" class="rui-mini-text" data-rui="open" aria-label="Open the audio player">' +
+      '<span class="rui-mini-title"></span><span class="rui-mini-detail"></span></button>' +
+      `<button type="button" class="rui-icon-btn" data-rui="open2" aria-label="Open the audio player" title="Open">${icon(
+        "expand"
+      )}</button>` +
+      `<button type="button" class="rui-icon-btn" data-rui="close" aria-label="Stop and close" title="Stop">${icon(
+        "close"
+      )}</button>`;
+    mini
+      .querySelector('[data-rui="play"]')
+      .addEventListener("click", togglePlay);
+    mini
+      .querySelector('[data-rui="open"]')
+      .addEventListener("click", openPlayerSheet);
+    mini
+      .querySelector('[data-rui="open2"]')
+      .addEventListener("click", openPlayerSheet);
+    mini.querySelector('[data-rui="close"]').addEventListener("click", () => {
+      stopListening();
+      player.session = false;
+      setSleep("off");
+      updatePlayer();
+    });
+    const host = document.getElementById("outerContainer") || document.body;
+    host.append(mini);
+    player.mini = mini;
+  }
+
+  function updateMiniPlayer(status) {
+    const mini = player.mini;
+    if (!mini) {
+      return;
+    }
+    const show =
+      player.session &&
+      !sheetOpen &&
+      (isSpeaking() || player.progress.total > 0);
+    mini.hidden = !show;
+    if (!show) {
+      return;
+    }
+    mini.querySelector(".rui-mini-title").textContent = status.title;
+    mini.querySelector(".rui-mini-detail").textContent =
+      status.detail.split(" · ")[0];
+    setPlayButton(mini.querySelector('[data-rui="play"]'));
+  }
+
+  function wirePlayer() {
+    buildMiniPlayer();
+    document.addEventListener("baws:speakingchange", () => {
+      if (isSpeaking()) {
+        player.session = true;
+      }
+      updatePlayer();
+    });
+    document.addEventListener("baws:readingprogress", event => {
+      const { page, index, total } = event.detail;
+      player.progress = { page, index, total };
+      // Sleep timer "End of chapter": stop once reading reaches a page
+      // past the chapter it was set in.
+      if (
+        player.sleepMode === "chapter" &&
+        player.sleepChapterEnd &&
+        page > player.sleepChapterEnd
+      ) {
+        player.sleepMode = "off";
+        stopListening();
+        toast("Sleep timer: stopped at the end of the chapter.");
+      }
+      updatePlayer();
+    });
+    document.addEventListener("baws:voiceschange", renderVoiceOptions);
+  }
+
+  // ---------------------------------------------------------------------
   // Built-in actions
   // ---------------------------------------------------------------------
 
@@ -1244,7 +1618,7 @@
       priority: 40,
       elementId: "voiceButton",
       pressed: () => !!window.audioMeta?.isSpeaking,
-      run: () => window.showVoicePanel?.(),
+      run: openPlayerSheet,
     });
     registerAction({
       id: "highlight",
@@ -1460,9 +1834,11 @@
       wireScrollHiding(container);
       wireGestures(container);
       wireSelectionBar(container);
+      wirePlayer();
       a.eventBus._on("pagechanging", () => {
         hideSelectionBar();
         closeDefinition();
+        updatePlayer();
       });
 
       if (!storageGet("ruiHintShown")) {
