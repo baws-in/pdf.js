@@ -35,4 +35,11 @@ Get-ChildItem -Path $sourceDir -Recurse -File | ForEach-Object {
     }
 }
 
+# The addon (doq.html etc.) is not part of the gulp build but ships with the
+# viewer (baws-search/public/pdfjs links to dist/generic), so copy it as-is.
+if (Test-Path "addon") {
+    Write-Host "Copying addon -> $destDir\generic\addon"
+    Copy-Item -Recurse -Force "addon" (Join-Path $destDir "generic\addon")
+}
+
 Write-Host "✅ Done! Minified site is in '$destDir'."
