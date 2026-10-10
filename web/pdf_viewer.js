@@ -749,8 +749,11 @@ class PDFViewer {
 
   /**
    * @param {PDFDocumentProxy} pdfDocument
+   * @param {Object} [options]
+   * @param {number} [options.initialPageNumber] - The page that will be shown
+   *   first. Its size is used as the default size for all page placeholders.
    */
-  setDocument(pdfDocument) {
+  setDocument(pdfDocument, { initialPageNumber = 1 } = {}) {
     if (this.pdfDocument) {
       this.eventBus.dispatch("pagesdestroy", { source: this });
 
@@ -771,7 +774,15 @@ class PDFViewer {
       return;
     }
     const pagesCount = pdfDocument.numPages;
-    const firstPagePromise = pdfDocument.getPage(1);
+    // Page 1 of a book is usually a cover with a different size, so take the
+    // default page size from the page that will be shown first.
+    const defaultPageNumber =
+      Number.isInteger(initialPageNumber) &&
+      initialPageNumber >= 1 &&
+      initialPageNumber <= pagesCount
+        ? initialPageNumber
+        : 1;
+    const firstPagePromise = pdfDocument.getPage(defaultPageNumber);
     // Rendering (potentially) depends on this, hence fetching it immediately.
     const optionalContentConfigPromise = pdfDocument.getOptionalContentConfig();
     const permissionsPromise = this.#enablePermissions
@@ -916,13 +927,13 @@ class PDFViewer {
           });
           this._pages.push(pageView);
         }
-        // Set the first `pdfPage` immediately, since it's already loaded,
-        // rather than having to repeat the `PDFDocumentProxy.getPage` call in
-        // the `this.#ensurePdfPageLoaded` method before rendering can start.
-        const firstPageView = this._pages[0];
+        // Set the already loaded `pdfPage` immediately, rather than having to
+        // repeat the `PDFDocumentProxy.getPage` call in the
+        // `this.#ensurePdfPageLoaded` method before rendering can start.
+        const firstPageView = this._pages[defaultPageNumber - 1];
         if (firstPageView) {
           firstPageView.setPdfPage(firstPdfPage);
-          this.linkService.cachePageRef(1, firstPdfPage.ref);
+          this.linkService.cachePageRef(defaultPageNumber, firstPdfPage.ref);
         }
 
         if (this._scrollMode === ScrollMode.PAGE) {

@@ -1320,7 +1320,12 @@ const PDFViewerApplication = {
     this.pdfDocumentProperties?.setDocument(pdfDocument);
 
     const pdfViewer = this.pdfViewer;
-    pdfViewer.setDocument(pdfDocument);
+    // Size the page placeholders from the page being opened rather than page 1,
+    // which for books is a cover with a different size.
+    const initialPageMatch = /(?:^|&)page=(\d+)/.exec(this.initialBookmark || "");
+    pdfViewer.setDocument(pdfDocument, {
+      initialPageNumber: initialPageMatch ? parseInt(initialPageMatch[1], 10) : 1,
+    });
     const { firstPagePromise, onePageRendered, pagesPromise } = pdfViewer;
 
     this.pdfThumbnailViewer?.setDocument(pdfDocument);
@@ -1818,8 +1823,6 @@ const PDFViewerApplication = {
     this.isInitialViewSet = true;
     this.pdfSidebar?.setInitialView(sidebarView);
 
-    setViewerModes(scrollMode, spreadMode);
-
     if (this.initialBookmark) {
       setRotation(this.initialRotation);
       delete this.initialRotation;
@@ -1831,6 +1834,11 @@ const PDFViewerApplication = {
 
       this.pdfLinkService.setHash(storedHash);
     }
+
+    // Apply the scroll/spread modes *after* moving to the initial page:
+    // changing the mode re-shows the current page, which before the bookmark
+    // is applied is still page 1 (the cover), and that starts rendering it.
+    setViewerModes(scrollMode, spreadMode);
 
     // Ensure that the correct page number is displayed in the UI,
     // even if the active page didn't change during document load.

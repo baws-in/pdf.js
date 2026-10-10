@@ -196,8 +196,10 @@ $(document).ready(function () {
   let scondsCount = 0;
   let loadPdfTimeOut;
 
+  // Poll every 500ms for up to 2 minutes; large books on slow connections can
+  // take well over 10 seconds to render their first page.
   function startWatching() {
-    loadPdfTimeOut = setTimeout(loadPdfApp, 1000);
+    loadPdfTimeOut = setTimeout(loadPdfApp, 500);
   }
   function loadPdfApp() {
     scondsCount++;
@@ -261,7 +263,7 @@ $(document).ready(function () {
         }
       });
     } else {
-      if (scondsCount <= 10) startWatching();
+      if (scondsCount <= 240) startWatching();
     }
   }
 
@@ -269,8 +271,6 @@ $(document).ready(function () {
     console.log(this.value);
     //if (synth.speaking) {
     //synth.pause();
-    msg.voice = audioMeta.voices[this.value];
-    msg.lang = msg.voice.lang;
     storeSelectedAudio(this.value);
     //  setTimeout(synth.resume(), 1000);
     //}
@@ -314,6 +314,20 @@ const requestWakeLock = async () => {
   }
 };
 
+// Fullscreen holds its own wake lock (released on exiting fullscreen), so
+// stopping the audio reader shouldn't let the screen sleep while fullscreen.
+const releaseWakeLock = async () => {
+  if (!wakeLock || flexi_isFullscreen) {
+    return;
+  }
+  try {
+    await wakeLock.release();
+  } catch (err) {
+    console.error(`${err.name}, ${err.message}`);
+  }
+  wakeLock = null;
+};
+
 async function fullScreen() {
   let mainContainer = document.getElementById("outerContainer");
 
@@ -343,18 +357,10 @@ async function fullScreen() {
 }
 function storeScrolling(scrolllerWatch) {
   let viewContainer = document.getElementById("viewerContainer");
-  let pdfMeta = localStorage.getItem("pdfMeta");
-  if (pdfMeta) {
-    pdfMeta = JSON.parse(pdfMeta);
-    pdfMeta.horizantalScroll = viewContainer.scrollLeft;
-    pdfMeta.verticalScroll = viewContainer.scrollTop;
-    setPdfMeta(pdfMeta);
-  } else {
-    setPdfMeta({
-      horizantalScroll: viewContainer.scrollLeft,
-      verticalScroll: viewContainer.scrollTop,
-    });
-  }
+  setPdfMeta({
+    horizantalScroll: viewContainer.scrollLeft,
+    verticalScroll: viewContainer.scrollTop,
+  });
   if (scrolllerWatch) {
     clearInterval(scrolllerWatch);
   }
@@ -362,9 +368,8 @@ function storeScrolling(scrolllerWatch) {
 function setScrolling() {
   let viewContainer = document.getElementById("viewerContainer");
 
-  let stickyPdf = localStorage.getItem("pdfMeta");
+  let stickyPdf = getPdfMeta();
   if (stickyPdf) {
-    stickyPdf = JSON.parse(stickyPdf);
     if (stickyPdf.horizantalScroll)
       viewContainer.scrollLeft = stickyPdf.horizantalScroll;
     if (stickyPdf.verticalScroll)
@@ -667,11 +672,17 @@ function updateVoiceSelector() {
     lang_hint2 = "India";
   }
 
+  const storedVoiceName = getPdfMeta().voiceName;
+  let lang_stored = null;
+
   const seenNames = new Set();
   $.each(audioMeta.voices, function (index, voice) {
     if (!voice || !voice.name || seenNames.has(voice.name)) return;
     seenNames.add(voice.name);
 
+    if (voice.name === storedVoiceName) {
+      lang_stored = index;
+    }
     if (voice.name.includes(lang_hint1) && voice.name.includes(lang_hint2)) {
       lang_set = index;
     } else if (
@@ -683,17 +694,26 @@ function updateVoiceSelector() {
     selectVoices.append($("<option></option>").val(index).html(voice.name));
   });
 
-  const voiceToSelect = lang_set !== null ? lang_set : lang_set_backup;
+  const voiceToSelect =
+    lang_stored !== null
+      ? lang_stored
+      : lang_set !== null
+        ? lang_set
+        : lang_set_backup;
   if (voiceToSelect !== null && audioMeta.voices[voiceToSelect]) {
     selectVoices.val(voiceToSelect);
-    msg.voice = audioMeta.voices[voiceToSelect];
-    msg.lang = msg.voice.lang;
+    setMsgVoice(audioMeta.voices[voiceToSelect]);
   }
 }
+
+// Incremented on every stop/start so "end" events from a cancelled utterance
+// (which can fire after the next one has started) are ignored.
+var speechSession = 0;
 
 function stopReading() {
   audioMeta.isSpeaking = false;
   speechUtteranceChunker.cancel = true;
+  speechSession++;
 
   if (window.parent && window.parent.isNativeApp) {
     window.parent.postMessage(
@@ -708,7 +728,7 @@ function stopReading() {
 var speechUtteranceChunker = function (utt, settings, callback) {
   settings = settings || {};
 
-  if (speechUtteranceChunker.cancel) {
+  if (speechUtteranceChunker.cancel || settings.session !== speechSession) {
     speechUtteranceChunker.cancel = false;
     return;
   }
@@ -745,7 +765,7 @@ var speechUtteranceChunker = function (utt, settings, callback) {
   var chunk = chunkArr[0];
 
   var onEnd = function () {
-    if (speechUtteranceChunker.cancel) {
+    if (speechUtteranceChunker.cancel || settings.session !== speechSession) {
       speechUtteranceChunker.cancel = false;
       return;
     }
@@ -803,8 +823,9 @@ async function startReading(paramText) {
 
   console.log("Starting reading: " + msg.text);
 
+  const session = ++speechSession;
   return new Promise(resolve => {
-    speechUtteranceChunker(msg, { chunkLength: 160 }, () => {
+    speechUtteranceChunker(msg, { chunkLength: 160, session }, () => {
       resolve();
     });
   });
@@ -998,7 +1019,7 @@ async function selectRangeForReading() {
               }
             } else {
               audioMeta.currentPara = 0;
-              setTimeout(openPageForReading("NEXT"), 1000);
+              setTimeout(() => openPageForReading("NEXT"), 1000);
             }
           });
         },
@@ -1047,7 +1068,7 @@ function nextParagraph() {
 
   if (audioMeta.totalReadItems > 0) {
     let nextParaIndex = audioMeta.currentPara + 1;
-    if (nextParaIndex > audioMeta.totalReadItems) {
+    if (nextParaIndex >= audioMeta.totalReadItems) {
       openPageForReading("NEXT");
     } else {
       stopReading();
@@ -1064,7 +1085,7 @@ function prevParagraph() {
   setTimeout(hideVoicePanel, 15000);
   if (audioMeta.totalReadItems > 0) {
     let prevParaIndex = audioMeta.currentPara - 1;
-    if (prevParaIndex < 1) {
+    if (prevParaIndex < 0) {
       openPageForReading("PREV");
     } else {
       stopReading();
@@ -1078,49 +1099,51 @@ function prevParagraph() {
   }
 }
 function storeSelectedAudio(voiceNo) {
-  if (voiceNo) {
-    let pdfMeta = localStorage.getItem("pdfMeta");
-    msg.voice = audioMeta.voices[voiceNo];
-    if (msg.voice) {
-      pdfMeta = JSON.parse(pdfMeta);
-      pdfMeta.voiceNo = voiceNo;
-      setPdfMeta(pdfMeta);
-    }
+  const voice = audioMeta.voices && audioMeta.voices[voiceNo];
+  if (voice) {
+    setMsgVoice(voice);
+    // Store the name, not the index: the voice list order is not stable.
+    setPdfMeta({ voiceName: voice.name });
   }
 }
-function assignSelectedAudioFromStore() {
-  let pdfMeta = getPdfMeta();
-  pdfMeta = JSON.parse(pdfMeta);
-  if (pdfMeta && audioMeta.voices.length > 0 && pdfMeta.voiceNo) {
-    msg.voice = audioMeta.voices[pdfMeta.voiceNo];
-    msg.lang = msg.voice.lang;
-    $("#selectVoices").val(pdfMeta.voiceNo);
-    //.change();
+// Native-app voices are plain objects; assigning one to a real
+// SpeechSynthesisUtterance.voice throws, so only set it for real voices.
+function setMsgVoice(voice) {
+  msg.lang = voice.lang;
+  if (
+    typeof SpeechSynthesisVoice === "undefined" ||
+    voice instanceof SpeechSynthesisVoice
+  ) {
+    msg.voice = voice;
   }
+}
+// Reader state (scroll position, voice) is stored per book.
+function getPdfMetaKey() {
+  const baseUrl = window.PDFViewerApplication?.baseUrl;
+  return baseUrl ? "pdfMeta:" + baseUrl : "pdfMeta";
 }
 function setPdfMeta(pdfMetaParam) {
-  let pdfMeta = getPdfMeta();
-  pdfMeta = JSON.parse(pdfMeta);
-  var mergeObj = { ...pdfMeta, ...pdfMetaParam };
-  localStorage.setItem("pdfMeta", JSON.stringify(mergeObj));
+  const mergeObj = { ...getPdfMeta(), ...pdfMetaParam };
+  localStorage.setItem(getPdfMetaKey(), JSON.stringify(mergeObj));
 }
 function getPdfMeta() {
-  return localStorage.getItem("pdfMeta");
+  try {
+    return JSON.parse(localStorage.getItem(getPdfMetaKey())) || {};
+  } catch (e) {
+    return {};
+  }
 }
 function setPlayIcon() {
   $("#audioPlayIcon").removeClass();
   if (audioMeta.isSpeaking) {
     $("#audioPlayIcon").addClass("far fa-stop fa-3x");
-    audioMeta.keepAlive = setInterval(() => {
-      //synth.resume();
-      console.log("We no longer need this resume");
-    }, 13000);
   } else {
     $("#audioPlayIcon").addClass("far fa-play fa-3x");
-    if (audioMeta.keepAlive) {
-      clearInterval(audioMeta.keepAlive);
-      audioMeta.keepAlive = null;
-    }
+  }
+  if ("mediaSession" in navigator && navigator.mediaSession.metadata) {
+    navigator.mediaSession.playbackState = audioMeta.isSpeaking
+      ? "playing"
+      : "paused";
   }
 }
 // --- Function to HIDE the panel ---
@@ -1310,12 +1333,27 @@ function uuidv4() {
   );
 }
 
+// Removes the temporary yellow spans added for the share image and puts the
+// original text back. Safe to call more than once.
+function restoreHighlightSpans(highlightSpans) {
+  while (highlightSpans.length > 0) {
+    const span = highlightSpans.pop();
+    const parent = span.parentNode;
+    if (!parent) continue;
+    while (span.firstChild) {
+      parent.insertBefore(span.firstChild, span);
+    }
+    parent.removeChild(span);
+  }
+}
+
 async function shareBookPageContent(
   selectedText,
   title,
   pageUrl,
   isLongPressShare
 ) {
+  const highlightSpans = [];
   try {
     // Get the HTML element to convert into an image
     var bookPageElement = document.getElementsByClassName("page")[0];
@@ -1324,7 +1362,6 @@ async function shareBookPageContent(
       console.log("The 'bookPage' element was not found on the page.");
       return;
     }
-    const highlightSpans = [];
     var selection = window.getSelection();
     if (selection.rangeCount > 0 && "pdf" == window.VIEW_MODE) {
       // Highlight the selected text
@@ -1452,23 +1489,24 @@ async function shareBookPageContent(
           50
         );
         qrCode.download({ name: uuidv4(), extension: "png" });
+        restoreHighlightSpans(highlightSpans);
         return;
       }
+    }
+
+    if (!canvas) {
+      // Reflowed text mode has no page image; share the text and link only.
+      if (navigator.share) {
+        await navigator.share({ title, text: selectedText, url: pageUrl });
+      }
+      return;
     }
 
     const imageBlob = await new Promise(resolve =>
       canvas.toBlob(resolve, "image/png")
     );
 
-    // Cleanup: Remove the highlight spans and restore the original text
-    // Cleanup: Restore the original text content
-    for (const span of highlightSpans) {
-      const parent = span.parentNode;
-      while (span.firstChild) {
-        parent.insertBefore(span.firstChild, span);
-      }
-      parent.removeChild(span);
-    }
+    restoreHighlightSpans(highlightSpans);
 
     if (
       !navigator.canShare ||
@@ -1521,6 +1559,7 @@ async function shareBookPageContent(
     }
   } catch (error) {
     console.error("Error sharing content:", error);
+    restoreHighlightSpans(highlightSpans);
   }
   genericShowPanel(
     "Selected text and address to current page copied to clipboard, please paste to share",
@@ -1607,7 +1646,7 @@ async function shareButtonClick(isLongPressShare) {
       var title = "From Dr Ambedkar's writings and speeches";
       if (outline) {
         var titles = getParentTitles(outline, urlData.pageNo);
-        title = title[titles.length - 1];
+        title = titles[titles.length - 1] || title;
         selectedText =
           "In " + titles.slice(1).join(">") + "\n\n" + selectedText;
       }
@@ -1660,6 +1699,28 @@ async function saveSelection() {
   }
 
   const range = selection.getRangeAt(0);
+  // Read the text from the live selection; the global `selectedText` may be
+  // stale or already rewritten by the share flow.
+  const highlightText = selection.toString().replace(/(\r\n|\n|\r)/gm, " ");
+  // In reflowed text mode the page box is not the PDF page, so screen
+  // coordinates would be drawn in the wrong place in PDF mode. Save text only.
+  const isReflow = window.VIEW_MODE === "text";
+
+  const startElement =
+    range.startContainer.nodeType === Node.ELEMENT_NODE
+      ? range.startContainer
+      : range.startContainer.parentElement;
+  const pageContainer = startElement?.closest(".page");
+  if (!pageContainer) {
+    console.error("Selection is not within a PDF page.");
+    return;
+  }
+
+  // Use the page the selection is on, which can differ from the "current"
+  // page when several pages are visible.
+  const pageNum = parseInt(pageContainer.dataset.pageNumber);
+  const pageRect = pageContainer.getBoundingClientRect();
+
   let urlData = getBookUrlData();
   let shortUrl =
     ("localhost" === window.location.hostname ? "" : window.location.hostname) +
@@ -1670,16 +1731,7 @@ async function saveSelection() {
     "/" +
     urlData.bookName +
     "/pdf/" +
-    urlData.pageNo;
-
-  const pageContainer = range.startContainer.parentElement.closest(".page");
-  if (!pageContainer) {
-    console.error("Selection is not within a PDF page.");
-    return;
-  }
-
-  const pageNum = parseInt(pageContainer.dataset.pageNumber);
-  const pageRect = pageContainer.getBoundingClientRect();
+    pageNum;
 
   /* --- OPTIMIZATION LOGIC ADDED --- */
   // This logic merges adjacent rectangles on the same line to reduce data size.
@@ -1743,22 +1795,24 @@ async function saveSelection() {
   }
   /* --- END OPTIMIZATION LOGIC --- */
 
-  // Get the viewport to calculate relative coordinates
-  const page = await pdfDoc.getPage(pageNum);
-
-  const relativeRects = mergedRects.map(rect => ({
-    topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
-    leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
-    widthPercent: (rect.width / pageRect.width) * 100,
-    heightPercent: (rect.height / pageRect.height) * 100,
-  }));
+  const relativeRects = isReflow
+    ? []
+    : mergedRects.map(rect => ({
+        topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
+        leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
+        widthPercent: (rect.width / pageRect.width) * 100,
+        heightPercent: (rect.height / pageRect.height) * 100,
+      }));
 
   // If filtering removed all rectangles, do not proceed.
-  if (relativeRects.length === 0) {
+  if (!isReflow && relativeRects.length === 0) {
     console.log(
       "Selection resulted in no valid highlight rectangles after filtering."
     );
     selection.removeAllRanges();
+    return;
+  }
+  if (!highlightText.trim()) {
     return;
   }
 
@@ -1766,8 +1820,8 @@ async function saveSelection() {
     id: crypto.randomUUID(),
     rects: relativeRects,
     url: shortUrl,
-    text: selectedText,
-    pageNo: urlData.pageNo,
+    text: highlightText,
+    pageNo: pageNum,
     context: [],
     title: urlData.bookName,
     baseUrl: PDFViewerApplication.baseUrl,
@@ -1822,6 +1876,10 @@ async function drawHighlightsOnPage(pageNum) {
     .querySelectorAll(".highlight-group")
     .forEach(group => group.remove());
 
+  // Stored rectangles are relative to the PDF page; they don't line up with
+  // the reflowed text, so don't draw them in text mode.
+  if (window.VIEW_MODE === "text") return;
+
   // Get the page and its current viewport to calculate absolute positions
   const page = await pdfDoc.getPage(pageNum);
   const pageRect = pageContainer.getBoundingClientRect(); // Get current on-screen size
@@ -1834,7 +1892,7 @@ async function drawHighlightsOnPage(pageNum) {
     "/" +
     urlData.bookName +
     "/pdf/" +
-    urlData.pageNo;
+    pageNum;
 
   const highlightsToDraw = storedHighlights.filter(
     h => h.pageNo === pageNum && h.url && h.url.includes(shortUrl)
@@ -1899,7 +1957,7 @@ function clearHighlightsOnPage(pageNum) {
     return;
   }
   const pageContainer = document.querySelector(
-    `.page-container[data-page-number='${pageNum}']`
+    `.page[data-page-number='${pageNum}']`
   );
   if (pageContainer) {
     const oldHighlights = pageContainer.querySelectorAll(".highlight-group");
@@ -2087,13 +2145,17 @@ function setupMediaSession() {
     // Set up action handlers for media keys (play/pause from notification)
     navigator.mediaSession.setActionHandler("play", () => {
       console.log("Media Session: Play action received.");
-      // You could add logic here to resume speech synthesis if it was paused.
-      // For simplicity, we'll just log it.
+      if (!audioMeta.isSpeaking) {
+        // Resumes from the current sentence when still on the same page.
+        selectRangeForReading();
+      }
     });
     navigator.mediaSession.setActionHandler("pause", () => {
       console.log("Media Session: Pause action received.");
-      // This is a good place to stop speech synthesis.
-      speechSynthesis.cancel();
+      // Keep the background session alive so "play" stays available.
+      stopReading();
+      setPlayIcon();
+      PDFViewerApplication.eventBus._off("pagechanging", readFlippedPage);
     });
   }
 }
@@ -2113,7 +2175,7 @@ function clearMediaSession() {
 // Clean up when the user navigates away from the page
 window.addEventListener("beforeunload", async () => {
   await disableBackgroundPlayback();
-  if (speechSynthesis.speaking) {
+  if (window.speechSynthesis && speechSynthesis.speaking) {
     speechSynthesis.cancel();
   }
 });
@@ -2152,9 +2214,20 @@ function speedIncrease() {
     audioMeta.rate = newRate;
     localStorage.setItem(SPEECH_RATE_STORAGE_KEY, audioMeta.rate);
     console.log("Speech rate increased to:", audioMeta.rate);
-    // If speech is currently active, you might need to stop and restart it
-    // with the new rate for the change to take effect immediately.
+    restartCurrentSentence();
   }
+}
+
+/**
+ * Re-reads the current sentence so a new speech rate takes effect right away.
+ */
+function restartCurrentSentence() {
+  if (!audioMeta.isSpeaking || audioMeta.itemsToRead.length === 0) {
+    return;
+  }
+  stopReading();
+  audioMeta.isSpeaking = true;
+  startNodeReading(audioMeta.itemsToRead, audioMeta.currentPara);
 }
 
 /**
@@ -2174,8 +2247,7 @@ function speedDecrease() {
     audioMeta.rate = newRate;
     localStorage.setItem(SPEECH_RATE_STORAGE_KEY, audioMeta.rate);
     console.log("Speech rate decreased to:", audioMeta.rate);
-    // If speech is currently active, you might need to stop and restart it
-    // with the new rate for the change to take effect immediately.
+    restartCurrentSentence();
   }
 }
 

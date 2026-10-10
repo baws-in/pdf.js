@@ -844,15 +844,25 @@ class PDFFindController {
     }
   }
 
-  #extractText() {
+  /**
+   * Text is only searched in a small window of pages around the current one.
+   * Clamp it to the document so we never request page 0 or past the end.
+   * @returns {Array<number>} [first page index, last page index + 1]
+   */
+  #searchWindow() {
     const currentPageIndex = this._linkService.page - 1;
+    const numPages = this._linkService.pagesCount;
+    return [
+      Math.max(0, currentPageIndex - 2),
+      Math.min(numPages, currentPageIndex + 2),
+    ];
+  }
 
-    // Perform text extraction once if this method is called multiple times.
-
-
+  #extractText() {
     let promise = Promise.resolve();
     const textOptions = { disableNormalization: true };
-    for (let i = currentPageIndex-2, ii = currentPageIndex+2; i < ii; i++) {
+    const [start, end] = this.#searchWindow();
+    for (let i = start; i < end; i++) {
       const extractTextCapability = new PromiseCapability();
       this._extractTextPromises[i] = extractTextCapability.promise;
 
@@ -948,9 +958,10 @@ class PDFFindController {
 
       this.#updateAllPages(); // Wipe out any previously highlighted matches.
 
-      for (let i = currentPageIndex-2; i < currentPageIndex+2; i++) {
+      const [start, end] = this.#searchWindow();
+      for (let i = start; i < end; i++) {
         // Start finding the matches as soon as the text is extracted.
-        if (this._pendingFindMatches.has(i)) {
+        if (this._pendingFindMatches.has(i) || !this._extractTextPromises[i]) {
           continue;
         }
         this._pendingFindMatches.add(i);
