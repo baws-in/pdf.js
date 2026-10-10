@@ -196,6 +196,13 @@
     if (action.elementId) {
       button.id = action.elementId;
     }
+    if (action.iconText) {
+      // A text glyph instead of an icon (e.g. "Aa" for display settings).
+      button.classList.add("rui-aa");
+      button.textContent = action.iconText;
+      wireButton(button, action);
+      return button;
+    }
     // Static markup (icons and fixed labels only).
     // eslint-disable-next-line no-unsanitized/property
     button.innerHTML = icon(action.icon);
@@ -1567,6 +1574,295 @@
   }
 
   // ---------------------------------------------------------------------
+  // Display settings
+  // ---------------------------------------------------------------------
+
+  // `doq` names a tone in addon/colors.json; the page images are recoloured
+  // by addon/doq.js (DOQReader.setTheme).
+  const THEMES = [
+    { id: "light", label: "Light", doq: null },
+    { id: "sepia", label: "Sepia", doq: ["Safari", "Sepia"] },
+    { id: "night", label: "Night", doq: ["Firefox", "Dark"] },
+    { id: "system", label: "System" },
+  ];
+  const TEXT_SCALE = { min: 0.8, max: 1.8, step: 0.1 };
+  const darkScheme = matchMedia("(prefers-color-scheme: dark)");
+  let appliedPageTheme = null;
+  let keepAwakeLock = null;
+
+  function storedTheme() {
+    const theme = storageGet("readerTheme");
+    return THEMES.some(t => t.id === theme) ? theme : "system";
+  }
+
+  function resolvedTheme() {
+    const theme = storedTheme();
+    if (theme !== "system") {
+      return theme;
+    }
+    return darkScheme.matches ? "night" : "light";
+  }
+
+  function applyTheme() {
+    const theme = resolvedTheme();
+    document.documentElement.setAttribute("data-rui-theme", theme);
+    applyPageTheme(theme);
+  }
+
+  function applyPageTheme(theme) {
+    const doq = window.DOQReader;
+    if (!doq?.setTheme || appliedPageTheme === theme) {
+      return; // doq not loaded yet: "doq:ready" applies it
+    }
+    appliedPageTheme = theme;
+    const [scheme, tone] = THEMES.find(t => t.id === theme)?.doq || [
+      "Firefox",
+      null,
+    ];
+    try {
+      doq.setTheme(scheme, tone);
+    } catch (ex) {
+      console.warn("Reader UI: could not recolour the pages:", ex);
+    }
+  }
+
+  function setTheme(id) {
+    storageSet("readerTheme", id);
+    applyTheme();
+  }
+
+  function textScale() {
+    const value = parseFloat(storageGet("readerTextScale"));
+    return value >= TEXT_SCALE.min && value <= TEXT_SCALE.max ? value : 1;
+  }
+
+  function setTextScale(value) {
+    const clamped = Math.min(TEXT_SCALE.max, Math.max(TEXT_SCALE.min, value));
+    const rounded = Math.round(clamped * 10) / 10;
+    storageSet("readerTextScale", String(rounded));
+    document.documentElement.style.setProperty("--rui-text-scale", rounded);
+    return rounded;
+  }
+
+  async function acquireKeepAwake() {
+    if (
+      keepAwakeLock ||
+      !navigator.wakeLock ||
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
+    try {
+      keepAwakeLock = await navigator.wakeLock.request("screen");
+      keepAwakeLock.addEventListener("release", () => {
+        keepAwakeLock = null;
+      });
+    } catch {
+      keepAwakeLock = null; // e.g. not allowed in this frame
+    }
+  }
+
+  function setKeepAwake(on) {
+    storageSet("readerKeepAwake", on ? "1" : "0");
+    if (on) {
+      acquireKeepAwake();
+    } else {
+      keepAwakeLock?.release();
+      keepAwakeLock = null;
+    }
+  }
+
+  function wireDisplaySettings() {
+    applyTheme();
+    setTextScale(textScale());
+    document.addEventListener("doq:ready", () => {
+      appliedPageTheme = null;
+      applyPageTheme(resolvedTheme());
+    });
+    darkScheme.addEventListener("change", () => {
+      if (storedTheme() === "system") {
+        applyTheme();
+      }
+    });
+    // The screen lock is dropped whenever the page is hidden; take it back.
+    document.addEventListener("visibilitychange", () => {
+      if (storageGet("readerKeepAwake") === "1") {
+        acquireKeepAwake();
+      }
+    });
+    if (storageGet("readerKeepAwake") === "1") {
+      acquireKeepAwake();
+    }
+  }
+
+  function makeSwitch(label, checked, onChange) {
+    const row = el("div", "rui-toggle-row");
+    const text = el("span");
+    text.textContent = label;
+    const button = el("button", "rui-switch", {
+      type: "button",
+      role: "switch",
+      "aria-checked": String(checked),
+      "aria-label": label,
+    });
+    button.addEventListener("click", () => {
+      const next = button.getAttribute("aria-checked") !== "true";
+      button.setAttribute("aria-checked", String(next));
+      onChange(next);
+    });
+    row.append(text, button);
+    return row;
+  }
+
+  function sectionTitle(text) {
+    const title = el("span", "rui-group-title");
+    title.textContent = text;
+    return title;
+  }
+
+  function openDisplaySheet() {
+    openSheet("Display", body => {
+      body.classList.add("rui-display");
+
+      // Theme
+      const themeGroup = el("div", "rui-group");
+      const themes = el("fieldset", "rui-themes", { role: "radiogroup" });
+      const legend = el("legend", "rui-visually-hidden");
+      legend.textContent = "Theme";
+      themes.append(legend);
+      const current = storedTheme();
+      for (const theme of THEMES) {
+        const option = el("label", "rui-theme");
+        const input = el("input", "", {
+          type: "radio",
+          name: "ruiTheme",
+          value: theme.id,
+        });
+        input.checked = theme.id === current;
+        input.addEventListener("change", () => setTheme(theme.id));
+        const swatch = el("span", `rui-theme-swatch rui-theme-${theme.id}`, {
+          "aria-hidden": "true",
+        });
+        if (theme.id === "system") {
+          const auto = el("span");
+          auto.textContent = "Auto";
+          swatch.append(auto);
+        } else {
+          swatch.textContent = "Aa";
+        }
+        const name = el("span", "rui-theme-name");
+        name.textContent = theme.label;
+        option.append(input, swatch, name);
+        themes.append(option);
+      }
+      themeGroup.append(sectionTitle("Theme"), themes);
+
+      // Layout
+      const layoutGroup = el("div", "rui-group");
+      const layout = el("div", "rui-segmented", {
+        role: "group",
+        "aria-label": "Page layout",
+      });
+      const modes = [
+        { mode: "pdf", label: "Original page", icon: "page" },
+        { mode: "text", label: "Fit to phone", icon: "phone" },
+      ];
+      const sizeGroup = el("div", "rui-group");
+      const modeButtons = modes.map(({ mode, label, icon: iconName }) => {
+        const button = el("button", "", { type: "button" });
+        // Static markup (icons and fixed labels only).
+        // eslint-disable-next-line no-unsanitized/property
+        button.innerHTML = icon(iconName) + "<span></span>";
+        button.querySelector("span").textContent = label;
+        button.addEventListener("click", () => {
+          if (window.VIEW_MODE !== mode) {
+            window.switchMode?.(mode);
+          }
+          syncModes();
+        });
+        layout.append(button);
+        return { mode, button };
+      });
+      const syncModes = () => {
+        for (const { mode, button } of modeButtons) {
+          button.setAttribute(
+            "aria-pressed",
+            String(window.VIEW_MODE === mode)
+          );
+        }
+        sizeGroup.hidden = window.VIEW_MODE !== "text";
+      };
+      layoutGroup.append(sectionTitle("Layout"), layout);
+
+      // Text size (the "Fit to phone" text; the original page uses zoom)
+      const head = el("div", "rui-row-head");
+      const value = el("span", "rui-row-value");
+      head.append(sectionTitle("Text size"), value);
+      const size = el("div", "rui-size");
+      const smaller = el("button", "rui-size-btn", {
+        type: "button",
+        "aria-label": "Smaller text",
+        style: "font-size:14px",
+      });
+      smaller.textContent = "A";
+      const larger = el("button", "rui-size-btn", {
+        type: "button",
+        "aria-label": "Larger text",
+        style: "font-size:22px",
+      });
+      larger.textContent = "A";
+      const range = el("input", "rui-size-range", {
+        type: "range",
+        min: String(TEXT_SCALE.min),
+        max: String(TEXT_SCALE.max),
+        step: String(TEXT_SCALE.step),
+        "aria-label": "Text size",
+      });
+      const showSize = scale => {
+        range.value = String(scale);
+        value.textContent = `${Math.round(scale * 100)}%`;
+        const ratio =
+          (scale - TEXT_SCALE.min) / (TEXT_SCALE.max - TEXT_SCALE.min);
+        range.style.setProperty("--rui-progress", `${ratio * 100}%`);
+      };
+      range.addEventListener("input", () =>
+        showSize(setTextScale(parseFloat(range.value)))
+      );
+      smaller.addEventListener("click", () =>
+        showSize(setTextScale(textScale() - TEXT_SCALE.step))
+      );
+      larger.addEventListener("click", () =>
+        showSize(setTextScale(textScale() + TEXT_SCALE.step))
+      );
+      size.append(smaller, range, larger);
+      sizeGroup.append(head, size);
+      showSize(textScale());
+
+      // Switches
+      const toggles = el("div", "rui-toggles");
+      toggles.append(
+        makeSwitch(
+          "Turn pages by swiping",
+          storageGet("readerSwipe") !== "0",
+          on => storageSet("readerSwipe", on ? "1" : "0")
+        )
+      );
+      if (navigator.wakeLock) {
+        toggles.append(
+          makeSwitch(
+            "Keep screen awake",
+            storageGet("readerKeepAwake") === "1",
+            setKeepAwake
+          )
+        );
+      }
+
+      body.append(themeGroup, layoutGroup, sizeGroup, toggles);
+      syncModes();
+    });
+  }
+
+  // ---------------------------------------------------------------------
   // Built-in actions
   // ---------------------------------------------------------------------
 
@@ -1690,19 +1986,13 @@
       run: openGoToPage,
     });
     registerAction({
-      id: "fitToPhone",
-      label() {
-        return window.VIEW_MODE === "text" ? "Original page" : "Fit to phone";
-      },
-      icon: "phone",
-      placements: ["more"],
-      group: "Reading",
-      priority: 90,
-      pressed: () => window.VIEW_MODE === "text",
-      // toggleView is a top-level const in viewer-flexi.js: reachable by
-      // name from this script, but not as a window property.
-      // eslint-disable-next-line no-undef
-      run: () => typeof toggleView === "function" && toggleView(),
+      id: "display",
+      label: "Display settings",
+      iconText: "Aa",
+      placements: ["top-end"],
+      priority: 15,
+      elementId: "ruiDisplay",
+      run: openDisplaySheet,
     });
     registerAction({
       id: "fullscreen",
@@ -1799,6 +2089,7 @@
   function startReaderUi() {
     registerBuiltInActions();
     buildChrome();
+    wireDisplaySettings();
 
     whenViewerReady(a => {
       a.eventBus._on("pagechanging", () => {

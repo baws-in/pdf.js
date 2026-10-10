@@ -28,24 +28,67 @@ html.rui {
     sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  html.rui {
-    --rui-accent: #5b7fe0;
-    --rui-accent-ink: #9db4f2;
-    --rui-accent-soft: #2a3350;
-    --rui-surface: rgba(32, 35, 42, 0.96);
-    --rui-surface-solid: #20232a;
-    --rui-tile: #2a2e36;
-    --rui-hover: rgba(231, 228, 220, 0.08);
-    --rui-ink: #e7e4dc;
-    --rui-ink-2: #cfcbc2;
-    --rui-muted: #a3a09a;
-    --rui-line: #2e323b;
-    --rui-scrim: rgba(0, 0, 0, 0.5);
-    --rui-toast-bg: #e7e4dc;
-    --rui-toast-fg: #16181d;
-    --rui-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
-  }
+/* Themes: data-rui-theme is set before first paint by the flag script in
+   viewer.html and changed from the display settings ("System" resolves to
+   light or night). The page itself is recoloured by addon/doq.js. */
+html.rui {
+  --rui-page-bg: #e9e6dd;
+  --rui-text-bg: #fffdf8;
+  --rui-text-ink: #1c1b19;
+}
+
+html.rui[data-rui-theme="sepia"] {
+  --rui-accent: #2b4c9b;
+  --rui-accent-ink: #2b4c9b;
+  --rui-accent-soft: #e4ddef;
+  --rui-surface: rgba(251, 245, 232, 0.96);
+  --rui-surface-solid: #fbf5e8;
+  --rui-tile: #efe3cb;
+  --rui-hover: rgba(59, 47, 34, 0.07);
+  --rui-ink: #3b2f22;
+  --rui-ink-2: #4c3d2c;
+  --rui-muted: #6e5d49;
+  --rui-line: #e4d6bb;
+  --rui-toast-bg: #3b2f22;
+  --rui-toast-fg: #fbf5e8;
+  --rui-page-bg: #e6d9bf;
+  --rui-text-bg: #f8f1e3;
+  --rui-text-ink: #4f321c;
+}
+
+html.rui[data-rui-theme="night"] {
+  --rui-accent: #5b7fe0;
+  --rui-accent-ink: #9db4f2;
+  --rui-accent-soft: #2a3350;
+  --rui-surface: rgba(32, 35, 42, 0.96);
+  --rui-surface-solid: #20232a;
+  --rui-tile: #2a2e36;
+  --rui-hover: rgba(231, 228, 220, 0.08);
+  --rui-ink: #e7e4dc;
+  --rui-ink-2: #cfcbc2;
+  --rui-muted: #a3a09a;
+  --rui-line: #2e323b;
+  --rui-scrim: rgba(0, 0, 0, 0.5);
+  --rui-toast-bg: #e7e4dc;
+  --rui-toast-fg: #16181d;
+  --rui-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  --rui-page-bg: #121418;
+  --rui-text-bg: #1c1b22;
+  --rui-text-ink: #e3e0d8;
+}
+
+html.rui body,
+html.rui #viewerContainer {
+  background-color: var(--rui-page-bg);
+}
+
+/* "Fit to phone" text: follows the theme and the text size setting. */
+html.rui .pdfViewer .textView {
+  background: var(--rui-text-bg);
+  background-image: none;
+  color: var(--rui-text-ink);
+  border-color: var(--rui-line);
+  font-size: calc(17px * var(--rui-text-scale, 1));
 }
 
 /* ---------- Replace the old chrome ---------- */
@@ -975,6 +1018,251 @@ html.rui-chrome-hidden .rui-mini {
 .rui-mini-detail {
   font-size: 11px;
   color: var(--rui-muted);
+}
+
+/* ---------- Display settings ---------- */
+
+.rui-aa {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.rui-display {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rui-themes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.rui-theme {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rui-theme input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rui-theme-swatch {
+  width: 100%;
+  height: 56px;
+  border-radius: 14px;
+  border: 1px solid var(--rui-line);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+}
+
+.rui-theme input:checked + .rui-theme-swatch {
+  box-shadow: 0 0 0 2px var(--rui-accent);
+  border-color: transparent;
+}
+
+.rui-theme input:checked ~ .rui-theme-name {
+  font-weight: 600;
+}
+
+.rui-theme input:focus-visible + .rui-theme-swatch {
+  outline: 2px solid var(--rui-accent);
+  outline-offset: 3px;
+}
+
+.rui-theme-light {
+  background: #fffdf8;
+  color: #1c1b19;
+}
+
+.rui-theme-sepia {
+  background: #f8f1e3;
+  color: #4f321c;
+}
+
+.rui-theme-night {
+  background: #1c1b22;
+  color: #eeeeee;
+}
+
+.rui-theme-system {
+  background: linear-gradient(135deg, #fffdf8 50%, #1c1b22 50%);
+  font-family: var(--rui-font);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rui-theme-system span {
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: var(--rui-surface-solid);
+  color: var(--rui-ink);
+}
+
+.rui-segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--rui-tile);
+}
+
+.rui-segmented button {
+  height: 44px;
+  border-radius: 11px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.rui-segmented button[aria-pressed="true"] {
+  background: var(--rui-surface-solid) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  font-weight: 600 !important;
+}
+
+.rui-segmented .rui-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.rui-size {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rui-size-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  background: var(--rui-tile) !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  flex-shrink: 0;
+}
+
+.rui-size-range {
+  --rui-progress: 50%;
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.rui-size-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--rui-accent) var(--rui-progress),
+    var(--rui-line) var(--rui-progress)
+  );
+}
+
+.rui-size-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.rui-size-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.rui-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.rui-row-value {
+  font-size: 13px;
+  color: var(--rui-muted);
+}
+
+.rui-toggles {
+  border-radius: 16px;
+  background: var(--rui-tile);
+  overflow: hidden;
+}
+
+.rui-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.rui-toggle-row + .rui-toggle-row {
+  border-top: 1px solid var(--rui-line);
+}
+
+.rui-toggle-row > span {
+  flex: 1;
+}
+
+.rui-switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px !important;
+  background: var(--rui-line) !important;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.rui-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.rui-switch[aria-checked="true"] {
+  background: var(--rui-accent) !important;
+}
+
+.rui-switch[aria-checked="true"]::after {
+  transform: translateX(18px);
 }
 
 /* ---------- Larger screens ---------- */

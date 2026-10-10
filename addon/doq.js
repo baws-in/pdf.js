@@ -12,8 +12,11 @@ async function doqInit() {
   fetch(path + "doq.html")
     .then(response => response.text()).then(installAddon)
     .then(() => {
-      /* window.DOQReader = DOQReader; */
       DOQReader.load(colors);
+      /* Published for the BAWS reader UI (web/reader-ui.js), which drives
+         the theme through DOQReader.setTheme(). */
+      window.DOQReader = DOQReader;
+      document.dispatchEvent(new CustomEvent("doq:ready"));
     });
   function installAddon(html) {
     const docFrag = document.createRange().createContextualFragment(html);
@@ -365,6 +368,25 @@ const DOQReader = {
     //pdfThumbnailViewer._thumbnails.filter(e => e.renderingState)
     //                              .forEach(e => e.reset());
     window.PDFViewerApplication.forceRendering();
+  },
+
+  /* Selects a tone from code and redraws the pages in it (used by the BAWS
+     reader UI). toneName null means the original colours. */
+  setTheme(schemeName, toneName) {
+    const selector = this.config.schemeSelector;
+    const index = Math.max(0,
+      this.colorSchemes.findIndex(scheme => scheme.name === schemeName));
+    if (selector.selectedIndex !== index) {
+      selector.selectedIndex = index;
+      this.updateColorScheme({});           /* rebuilds the tone choices */
+    }
+    const tones = this.colorSchemes[index].tones.slice(0, 3);
+    const toneIndex = toneName
+      ? tones.findIndex(tone => tone.name === toneName) + 1
+      : 0;
+    this.config.tonePicker.elements[Math.max(0, toneIndex)].checked = true;
+    /* Same path as a click on a tone: redraw with a fresh colour cache. */
+    this.updateReaderColors({ isTrusted: true });
   },
 
   enableReader(redraw) {

@@ -40,6 +40,17 @@ See https://github.com/adobe-type-tools/cmap-resources
         window.BAWS_READER_UI = on ? 2 : 1;
         if (on) {
           document.documentElement.classList.add("rui");
+          // Apply the saved theme before first paint (no white flash at night).
+          var theme = "system";
+          try {
+            theme = localStorage.getItem("readerTheme") || "system";
+          } catch (e) {}
+          if (theme === "system") {
+            theme = matchMedia("(prefers-color-scheme: dark)").matches
+              ? "night"
+              : "light";
+          }
+          document.documentElement.setAttribute("data-rui-theme", theme);
         }
       })();
     </script>
