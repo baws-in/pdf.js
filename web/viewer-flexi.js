@@ -1844,6 +1844,9 @@ async function drawHighlightsOnPage(pageNum) {
   const page = await pdfDoc.getPage(pageNum);
   const pageRect = pageContainer.getBoundingClientRect(); // Get current on-screen size
   let urlData = getBookUrlData();
+  // Files outside the /<parent>/<language>/<book>.pdf layout (e.g. local
+  // test files) have no book address, so no highlights can belong to them.
+  if (!urlData) return;
   let shortUrl =
     "/books/" +
     urlData.bookParent +

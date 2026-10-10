@@ -162,6 +162,12 @@ WebServer.prototype = {
         Math.floor(stats.mtimeMs).toString(16) +
         '"';
       fileLastModified = stats.mtime.toUTCString();
+      // With Last-Modified present, browsers would otherwise treat old
+      // source files as fresh for weeks (heuristic caching), so edits don't
+      // show up on a normal reload. Make them revalidate every time.
+      if (!(cacheExpirationTime > 0)) {
+        res.setHeader("Cache-Control", "no-cache");
+      }
       var isDir = stats.isDirectory();
       if (isDir && !/\/$/.test(pathPart)) {
         res.setHeader("Location", pathPart + "/" + urlParts[2]);
