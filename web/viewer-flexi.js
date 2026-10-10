@@ -48,24 +48,68 @@ var audioMeta = {
   totalReadItems: 0,
   itemsToRead: [],
   currentPage: 0,
-  rate:0.95,
+  rate: 0.95,
 };
 
-const SPEECH_RATE_STORAGE_KEY = 'userSpeechRate';
+const SPEECH_RATE_STORAGE_KEY = "userSpeechRate";
 const SILENT_AUDIO_SRC = "https://baws.in/reader/silence.mp3";
 let silentAudio = null;
-var voicePanel = document.getElementById('voicePanel');
+var voicePanel = document.getElementById("voicePanel");
 
 if ("speechSynthesis" in window) {
   var msg = new SpeechSynthesisUtterance();
   var synth = window.speechSynthesis;
-  initializeSpeechRate();  
+  initializeSpeechRate();
+} else {
+  var msg = { volume: 1, rate: 0.95, pitch: 1, text: "", lang: "en-US" };
+  var synth = null;
 }
 
 let wakeLock = null;
 
 $(document).ready(function () {
-  voicePanel = document.getElementById('voicePanel');
+  voicePanel = document.getElementById("voicePanel");
+
+  // Moved message listener here for better reliability
+  window.addEventListener("message", event => {
+    let data = event.data;
+    if (typeof data === "string") {
+      try {
+        data = JSON.parse(data);
+      } catch (e) {}
+    }
+    if (!data) return;
+
+    const action = data.action || data.type;
+    const payload = data.data || data.payload;
+
+    if (action === "loadHighlights") {
+      const pdfDoc = PDFViewerApplication.pdfDocument;
+      console.log("iframe: Received highlights from parent.");
+      storedHighlights = payload || [];
+      if (pdfDoc) {
+        const current_pageNumber =
+          PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber;
+        drawHighlightsOnPage(current_pageNumber);
+      }
+    } else if (action === "nativeSpeechEnded" || action === "speechEnd") {
+      if (speechUtteranceChunker.onSpeechEnd) {
+        const cb = speechUtteranceChunker.onSpeechEnd;
+        speechUtteranceChunker.onSpeechEnd = null;
+        cb();
+      }
+    } else if (
+      action === "getVoices" ||
+      action === "setVoicesNative" ||
+      action === "voicesLoaded"
+    ) {
+      const voicesArray = data.voices || payload;
+      console.log("Received voices from parent:", voicesArray);
+      audioMeta.voices = voicesArray;
+      updateVoiceSelector();
+    }
+  });
+
   $(".moreReadable").click(function (event) {
     // moreReadable = !moreReadable;
     // if (moreReadable) {
@@ -158,7 +202,7 @@ $(document).ready(function () {
   function loadPdfApp() {
     scondsCount++;
     if (
-      window.PDFViewerApplication &&      
+      window.PDFViewerApplication &&
       window.PDFViewerApplication.eventBus &&
       window.PDFViewerApplication.initialized &&
       window.PDFViewerApplication.pdfViewer.onePageRendered
@@ -166,10 +210,10 @@ $(document).ready(function () {
       clearTimeout(loadPdfTimeOut);
       setVoices();
       isBookLoaded = true;
-      
+
       const { onePageRendered } = PDFViewerApplication.pdfViewer;
       // 1. Find the element by its ID
-      const elementToFocus = document.getElementById('viewer');
+      const elementToFocus = document.getElementById("viewer");
 
       // 2. Set focus on the element
       // Use optional chaining (?.) to avoid an error if the element isn't found
@@ -180,22 +224,7 @@ $(document).ready(function () {
           document.getElementById("view-switch").style.display = "inline-block";
         }
       });
-      window.parent.postMessage({ type: 'iframeReady' }, '*');
-      window.addEventListener('message', (event) => {
-        
-        const { type, payload } = event.data;
-        if (type === 'loadHighlights') {
-            const pdfDoc = PDFViewerApplication.pdfDocument;
-            console.log("iframe: Received highlights from parent.");
-            storedHighlights = payload || [];
-            // Redraw all pages with the new data
-            if (pdfDoc) {
-                  const current_pageNumber = PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber;  
-                  drawHighlightsOnPage(current_pageNumber);
-            }
-        
-        }
-      });
+      window.parent.postMessage({ type: "iframeReady" }, "*");
 
       postBawsMsg("pageChanged");
 
@@ -230,7 +259,6 @@ $(document).ready(function () {
           const position = window.innerWidth - rect.right;
           span.style.right = position * 1.1 + "px";
         }
-        
       });
     } else {
       if (scondsCount <= 10) startWatching();
@@ -261,15 +289,14 @@ $(document).ready(function () {
   });
 
   startWatching();
-  
 });
 
-window.addEventListener('load', () => {
-    window.parent.postMessage({ type: 'iframeReady' }, '*');
+window.addEventListener("load", () => {
+  window.parent.postMessage({ type: "iframeReady" }, "*");
 });
 
-window.addEventListener('beforeunload', () => {
-    window.parent.postMessage({ type: 'iframeUnloading' }, '*');
+window.addEventListener("beforeunload", () => {
+  window.parent.postMessage({ type: "iframeUnloading" }, "*");
 });
 
 // Function that attempts to request a screen wake lock.
@@ -417,7 +444,7 @@ function onBookClick() {
       console.log(result);
       setTimeout(function () {
         showDictionary(result, check_one_word);
-      }, 2000);
+      }, 1000);
     }
   }
 }
@@ -579,7 +606,7 @@ function readFlippedPage() {
     //make it appear like play on new page
     stopReading();
     setPlayIcon();
-    setTimeout(1000, selectRangeForReading());
+    setTimeout(selectRangeForReading, 1000);
   }
 }
 function openPageForReading(directionType) {
@@ -599,217 +626,208 @@ function getChildNodeLenght(contentNode) {
       : 0;
   return no;
 }
+function cleanTextForSpeech(str) {
+  if (!str) return "";
+  str = str.replace(/\*/g, "");
+  str = str.replace(/ Manusmriti /g, " मनुस्मृति ");
+  str = str.replace(/ Smriti /g, " स्मृति ");
+  str = str.replace(/ Smritis /g, " स्मृति ");
+  str = str.replace(/ Shudras /g, " Shoodras ");
+  str = str.replace(/ Shudra /g, " Shoodra ");
+  str = str.replace(/ B.C. /g, " BC ");
+  str = str.replace(/ A.D. /g, " AD ");
+  str = str.replace(/ Dr. /g, " doctor ");
+  str = str.replace(/ Mr. /g, " mister ");
+  str = str.replace(/ pp. /g, " page ");
+  str = str.replace(/ Mrs. /g, " Missus ");
+  str = str.replace(/ Prof. /g, " Professor ");
+  str = str.replace(/ i.e. /g, " ,that is, ");
+  if (str === str.toUpperCase()) {
+    str = str.toLowerCase();
+  }
+  return str;
+}
+
+function updateVoiceSelector() {
+  const selectVoices = $("#selectVoices");
+  selectVoices.empty(); // Clear the dropdown
+
+  if (!audioMeta.voices || audioMeta.voices.length === 0) return;
+
+  let lang_hint1 = "English";
+  let lang_hint2 = "India";
+  let lang_set = null;
+  let lang_set_backup = null;
+
+  if (PDFViewerApplication.baseUrl.includes("/HI/")) {
+    lang_hint1 = " हिन्दी";
+    lang_hint2 = "Hindi";
+  } else if (PDFViewerApplication.baseUrl.includes("/EN/")) {
+    lang_hint1 = "English";
+    lang_hint2 = "India";
+  }
+
+  const seenNames = new Set();
+  $.each(audioMeta.voices, function (index, voice) {
+    if (!voice || !voice.name || seenNames.has(voice.name)) return;
+    seenNames.add(voice.name);
+
+    if (voice.name.includes(lang_hint1) && voice.name.includes(lang_hint2)) {
+      lang_set = index;
+    } else if (
+      lang_set_backup === null &&
+      (voice.name.includes(lang_hint1) || voice.name.includes(lang_hint2))
+    ) {
+      lang_set_backup = index;
+    }
+    selectVoices.append($("<option></option>").val(index).html(voice.name));
+  });
+
+  const voiceToSelect = lang_set !== null ? lang_set : lang_set_backup;
+  if (voiceToSelect !== null && audioMeta.voices[voiceToSelect]) {
+    selectVoices.val(voiceToSelect);
+    msg.voice = audioMeta.voices[voiceToSelect];
+    msg.lang = msg.voice.lang;
+  }
+}
+
 function stopReading() {
-  console.log(synth.speaking);
   audioMeta.isSpeaking = false;
-  synth.pause();
-  synth.cancel();
-  console.log(synth.speaking);
+  speechUtteranceChunker.cancel = true;
+
+  if (window.parent && window.parent.isNativeApp) {
+    window.parent.postMessage(
+      JSON.stringify({ action: "stopSpeechNative" }),
+      "*"
+    );
+  } else if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
 }
 
 var speechUtteranceChunker = function (utt, settings, callback) {
   settings = settings || {};
-  var newUtt;
+
+  if (speechUtteranceChunker.cancel) {
+    speechUtteranceChunker.cancel = false;
+    return;
+  }
+
   var txt =
-    settings && settings.offset !== undefined
+    settings.offset !== undefined
       ? utt.text.substring(settings.offset)
       : utt.text;
-  if (utt.voice && utt.voice.voiceURI === "native") {
-    // Not part of the spec
-    newUtt = utt;
-    newUtt.text = txt;
-    newUtt.addEventListener("end", function () {
-      if (speechUtteranceChunker.cancel) {
-        speechUtteranceChunker.cancel = false;
-      }
-      if (callback !== undefined) {
-        callback();
-      }
-    });
-  } else {
-    var chunkLength = (settings && settings.chunkLength) || 160;
-    var pattRegex = new RegExp(
-      "^[\\s\\S]{" +
-        Math.floor(chunkLength / 2) +
-        "," +
-        chunkLength +
-        "}[$]{1}|^[\\s\\S]{1," +
-        chunkLength +
-        "}$|^[\\s\\S]{1," +
-        chunkLength +
-        "} "
-    );
-    var chunkArr = txt.match(pattRegex);
+  var chunkLength = settings.chunkLength || 160;
 
-    if (chunkArr[0] === undefined || chunkArr[0].length <= 1) {
-      //call once all text has been spoken...
-      if (callback !== undefined) {
-        callback();
-      }
+  if (!txt || txt.length <= 1) {
+    if (callback) callback();
+    return;
+  }
+
+  var pattRegex = new RegExp(
+    "^[\\s\\S]{" +
+      Math.floor(chunkLength / 2) +
+      "," +
+      chunkLength +
+      "}[$]{1}|^[\\s\\S]{1," +
+      chunkLength +
+      "}$|^[\\s\\S]{1," +
+      chunkLength +
+      "} "
+  );
+  var chunkArr = txt.match(pattRegex);
+
+  if (!chunkArr || !chunkArr[0]) {
+    if (callback) callback();
+    return;
+  }
+
+  var chunk = chunkArr[0];
+
+  var onEnd = function () {
+    if (speechUtteranceChunker.cancel) {
+      speechUtteranceChunker.cancel = false;
       return;
     }
-    var chunk = chunkArr[0];
-    newUtt = new SpeechSynthesisUtterance(chunk);
-    var x;
-    for (x in utt) {
-      if (utt.hasOwnProperty(x) && x !== "text") {
-        newUtt[x] = utt[x];
-      }
+    settings.offset = (settings.offset || 0) + chunk.length - 1;
+    speechUtteranceChunker(utt, settings, callback);
+  };
+
+  if (window.parent && window.parent.isNativeApp) {
+    console.log("Native speaking chunk:", chunk);
+    speechUtteranceChunker.onSpeechEnd = onEnd;
+    window.parent.postMessage(
+      JSON.stringify({
+        action: "speakTextNative",
+        data: {
+          text: chunk,
+          rate: utt.rate || 1,
+          volume: utt.volume || 1,
+          pitch: utt.pitch || 1,
+          lang: utt.lang || "en-US",
+        },
+      }),
+      "*"
+    );
+  } else {
+    var newUtt = new SpeechSynthesisUtterance(chunk);
+
+    // Copy properties from original utterance
+    ["lang", "voice", "volume", "pitch", "rate"].forEach(prop => {
+      if (utt[prop] !== undefined) newUtt[prop] = utt[prop];
+    });
+
+    newUtt.addEventListener("end", onEnd);
+
+    if (settings.modifier) {
+      settings.modifier(newUtt);
     }
 
-    newUtt.lang = utt.lang;
-    newUtt.voice = utt.voice;
-    newUtt.volume = utt.volume;
-    newUtt.pitch = utt.pitch;
-
-    newUtt.addEventListener("end", function () {
-      if (speechUtteranceChunker.cancel) {
-        speechUtteranceChunker.cancel = false;
-        return;
-      }
-      settings.offset = settings.offset || 0;
-      settings.offset += chunk.length - 1;
-      speechUtteranceChunker(utt, settings, callback);
-
-      // if (settings.offset >= utt.text.length -1){
-      //   newUtt.onend = callback;
-      // }
-      // else{
-      //   speechUtteranceChunker(utt, settings, callback);
-      // }
-    });
+    console.log("Speaking chunk:", chunk);
+    window.speechSynthesis.speak(newUtt);
   }
-
-  if (settings.modifier) {
-    settings.modifier(newUtt);
-  }
-  console.log(newUtt); //IMPORTANT!! Do not remove: Logging the object out fixes some onend firing issues.
-  //placing the speak invocation inside a callback fixes ordering and onend issues.
-  speechSynthesis.speak(newUtt);
 };
 
 async function startReading(paramText) {
-  if ("speechSynthesis" in window) {
-    synth.cancel();
-    console.log(synth.speaking);
-    // msg.voice = audioMeta.voices[10]; // Note: some voices don't support altering params
-    //msg.voiceURI = 'native';
-    msg.volume = 1; // 0 to 1
-    msg.rate = audioMeta.rate; // 0.1 to 10
-    msg.pitch = 1; //0 to 2
+  const isNative = window.parent && window.parent.isNativeApp;
+  if (!("speechSynthesis" in window) && !isNative) return;
 
-    let str = paramText.replace(/\*/g, "");
-    str = str.replace(/ Manusmriti /g, " मनुस्मृति ");
-    str = str.replace(/ Smriti /g, " स्मृति ");
-    str = str.replace(/ Smritis /g, " स्मृति ");
-    str = str.replace(/ Shudras /g, " Shoodras ");
-    str = str.replace(/ Shudra /g, " Shoodra ");
-    str = str.replace(/ B.C. /g, " BC ");
-    str = str.replace(/ A.D. /g, " AD ");
-    str = str.replace(/ Dr. /g, " doctor ");
-    str = str.replace(/ Mr. /g, " mister ");
-    str = str.replace(/ pp. /g, " page ");
-    str = str.replace(/ Mrs. /g, " Missus ");
-    str = str.replace(/ Prof. /g, " Professor ");
-    str = str.replace(/ i.e. /g, " ,that is, ");
-    if (str === str.toUpperCase()) {
-      str = str.toLowerCase();
-    }
+  stopReading();
+  audioMeta.isSpeaking = true; // Ensure flag remains true during sequence
+  speechUtteranceChunker.cancel = false;
 
-    msg.text = str;
-    console.log("Speaking: " + str);
-    //msg.lang = 'en-US';
-    //synth.speak(msg);
-    speechUtteranceChunker(
-      msg,
-      {
-        chunkLength: 160,
-      },
-      function () {
-        //some code to execute when done
-        msg.onend();
-        console.log("done");
-      }
-    );
+  msg.volume = 1;
+  msg.rate = audioMeta.rate || 0.95;
+  msg.pitch = 1;
+  msg.text = cleanTextForSpeech(paramText);
 
-    return new Promise(resolve => {
-      msg.onend = function (event) {
-        resolve();
-      };
-      msg.onerror = msg.onend;
+  console.log("Starting reading: " + msg.text);
+
+  return new Promise(resolve => {
+    speechUtteranceChunker(msg, { chunkLength: 160 }, () => {
+      resolve();
     });
-  }
+  });
 }
 function setVoices() {
-  var timer;
-  try {
-    timer = setInterval(function () {
-      audioMeta.voices = synth.getVoices();
-      console.log(audioMeta.voices);
-      let lang_hint1 = "English";
-      let lang_hint2 = "India";
-      let lang_set = null;
-      let lang_set_backup = null;
-      if (PDFViewerApplication.baseUrl.includes("/HI/")) {
-        lang_hint1 = " हिन्दी";
-        lang_hint2 = "Hindi";
-      }
-      if (PDFViewerApplication.baseUrl.includes("/EN/")) {
-        lang_hint1 = "English";
-        lang_hint2 = "India";
-      }
-
-      $.each(audioMeta.voices, function (index, voice) {
-        if (
-          voice.name.includes(lang_hint1) &&
-          voice.name.includes(lang_hint2)
-        ) {
-          lang_set = index;
-        }
-        if (voice.name.includes(lang_hint1)) {
-          lang_set_backup = index;
-        }
-        if (voice.name.includes(lang_hint2)) {
-          lang_set_backup = index;
-        }
-        $("#selectVoices").append(
-          $("<option></option>").val(index).html(voice.name)
-        );
-      });
-      if (audioMeta.voices.length !== 0) {
-        //assignSelectedAudioFromStore()
-        if (timer) clearInterval(timer);
-      }
-      if (lang_set) {
-        $("#selectVoices").val(lang_set);
-        msg.voice = audioMeta.voices[lang_set];
-        msg.lang = msg.voice.lang;
-      } else if (lang_set_backup) {
-        $("#selectVoices").val(lang_set_backup);
-        msg.voice = audioMeta.voices[lang_set_backup];
-        msg.lang = msg.voice.lang;
-      }
-    }, 2000);
-  } catch (err) {
-    if (timer) clearInterval(timer);
+  if (window.parent && window.parent.isNativeApp) {
+    window.parent.postMessage(JSON.stringify({ action: "getVoices" }), "*");
+    return;
   }
+
+  if (typeof synth === "undefined" || !synth) return;
+
+  var timer = setInterval(function () {
+    const voices = synth.getVoices();
+    if (voices && voices.length !== 0) {
+      audioMeta.voices = voices;
+      updateVoiceSelector();
+      clearInterval(timer);
+    }
+  }, 2000);
 }
 async function startNodeReading(contentNode, startIndex) {
   if (contentNode && contentNode.length > 0) {
-    // for (let i = 0; i < contentNode.childNodes.length;) {
-    //   clearTextSelection();
-    //   let range = new Range();
-    //   range.setStart(contentNode, i);
-    //   let endNode=i + 5;
-    //   i=i+5;
-    //   if(endNode > contentNode.childNodes.length)
-    //   {
-    //     endNode= contentNode.childNodes.length
-    //   }
-    //  range.setEnd(contentNode, endNode);
-    //  document.getSelection().addRange(range);
-    //  await startReading(range,msg)
-    // }
     let i = startIndex ? startIndex : 0;
     var garbage_regex = /[\p{N}\p{L}]/u;
     for (; i < contentNode.length; ) {
@@ -817,7 +835,7 @@ async function startNodeReading(contentNode, startIndex) {
         audioMeta.currentPara = i;
 
         var toRead = contentNode[i];
-        currentReadIndex = i;
+        let currentReadIndex = i;
 
         if (toRead.match(garbage_regex)) {
           PDFViewerApplication.eventBus.dispatch("find", {
@@ -833,7 +851,7 @@ async function startNodeReading(contentNode, startIndex) {
           await startReading(toRead);
         }
         if (i == contentNode.length - 1) {
-          setTimeout(openPageForReading("NEXT"), 2000);
+          setTimeout(() => openPageForReading("NEXT"), 1000);
         }
         i++;
       } else {
@@ -873,7 +891,6 @@ async function selectRangeForReading() {
   if (!audioMeta.isSpeaking) {
     // We are about to start speaking
     await enableBackgroundPlayback();
-
   }
   PDFViewerApplication.eventBus._off("pagechanging", readFlippedPage);
   PDFViewerApplication.eventBus._on("pagechanging", readFlippedPage);
@@ -927,10 +944,10 @@ async function selectRangeForReading() {
                 final_str = chanakya2unicodeEx(final_str);
               }
               var ignore_height = 600;
-              var heightTolerance = 0.05
+              var heightTolerance = 0.05;
               if (PDFViewerApplication.baseUrl.includes("/MR/")) {
                 ignore_height = 2840;
-                heightTolerance = .13
+                heightTolerance = 0.13;
                 if (
                   first_element_height > 2700 &&
                   first_element_height < 2840
@@ -938,10 +955,12 @@ async function selectRangeForReading() {
                   ignore_height = 2700;
                 }
               }
-              
 
-              if (textItem.height > 0 && textItem.height > 0 &&
-                Math.abs(textItem.height - prevHeight)/prevHeight >= heightTolerance 
+              if (
+                textItem.height > 0 &&
+                textItem.height > 0 &&
+                Math.abs(textItem.height - prevHeight) / prevHeight >=
+                  heightTolerance
               ) {
                 strBuf.push("\n ");
               }
@@ -1106,26 +1125,29 @@ function setPlayIcon() {
 }
 // --- Function to HIDE the panel ---
 function hideVoicePanel() {
-    voicePanel.classList.add('hidden');
+  voicePanel.classList.add("hidden");
 }
 
 // --- Function to SHOW the panel ---
 // Call this from the button that opens your reader controls
 function showVoicePanel() {
-    voicePanel.classList.remove('hidden');
+  voicePanel.classList.remove("hidden");
 }
-document.addEventListener('mousedown', function(event) {
-    // Don't do anything if the panel is already hidden
-    if (voicePanel.classList.contains('hidden')) {
-        return;
-    }
+document.addEventListener("mousedown", function (event) {
+  // Don't do anything if the panel is already hidden
+  if (voicePanel.classList.contains("hidden")) {
+    return;
+  }
 
-    // Check if the click was outside the voicePanel
-    // and also not on a button that is MEANT to open the panel
-    // (You should add a class like 'opens-voice-panel' to your trigger button)
-    if (!voicePanel.contains(event.target) && !event.target.closest('.opens-voice-panel')) {
-        hideVoicePanel();
-    }
+  // Check if the click was outside the voicePanel
+  // and also not on a button that is MEANT to open the panel
+  // (You should add a class like 'opens-voice-panel' to your trigger button)
+  if (
+    !voicePanel.contains(event.target) &&
+    !event.target.closest(".opens-voice-panel")
+  ) {
+    hideVoicePanel();
+  }
 });
 
 //audio end
@@ -1452,6 +1474,31 @@ async function shareBookPageContent(
       !navigator.canShare ||
       !navigator.canShare({ files: [new File([], "")] })
     ) {
+      const reader = new FileReader();
+      reader.onloadend = function() {
+        const base64data = reader.result;
+        
+        // If we are embedded in the Capacitor App, send the image up to be shared natively
+        if (window.parent && window.parent.isNativeApp) {
+          window.parent.postMessage(JSON.stringify({
+            action: "shareImageNative",
+            data: {
+              title: title,
+              url: pageUrl,
+              base64: base64data
+            }
+          }), "*");
+        } else {
+          // Standard web fallback (download the image locally)
+          const a = document.createElement("a");
+          a.href = base64data;
+          a.download = uuidv4() + ".png";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+      };
+      reader.readAsDataURL(imageBlob);
       return;
     }
 
@@ -1646,19 +1693,19 @@ async function saveSelection() {
   }
 
   for (const rect of selectionRects) {
-      if (rect.width <= 1) continue; // Filter out tiny or zero-width rects
+    if (rect.width <= 1) continue; // Filter out tiny or zero-width rects
 
-      let added = false;
-      for (const top of lines.keys()) {
-          if (Math.abs(rect.top - top) < V_TOLERANCE) {
-              lines.get(top).push(rect);
-              added = true;
-              break;
-          }
+    let added = false;
+    for (const top of lines.keys()) {
+      if (Math.abs(rect.top - top) < V_TOLERANCE) {
+        lines.get(top).push(rect);
+        added = true;
+        break;
       }
-      if (!added) {
-          lines.set(rect.top, [rect]);
-      }
+    }
+    if (!added) {
+      lines.set(rect.top, [rect]);
+    }
   }
 
   // 2. Merge rects within each line
@@ -1670,28 +1717,29 @@ async function saveSelection() {
   }
 
   for (const lineRects of lines.values()) {
-      lineRects.sort((a, b) => a.left - b.left);
-      if (lineRects.length === 0) continue;
+    lineRects.sort((a, b) => a.left - b.left);
+    if (lineRects.length === 0) continue;
 
-      let currentMergedRect = lineRects[0];
-      for (let i = 1; i < lineRects.length; i++) {
-          const nextRect = lineRects[i];
-          const gap = nextRect.left - currentMergedRect.right;
+    let currentMergedRect = lineRects[0];
+    for (let i = 1; i < lineRects.length; i++) {
+      const nextRect = lineRects[i];
+      const gap = nextRect.left - currentMergedRect.right;
 
-          if (gap <= H_TOLERANCE) { // Check if they are adjacent enough to merge
-              const newRight = Math.max(currentMergedRect.right, nextRect.right);
-              currentMergedRect = new DOMRect(
-                  currentMergedRect.left,
-                  Math.min(currentMergedRect.top, nextRect.top),
-                  newRight - currentMergedRect.left,
-                  Math.max(currentMergedRect.height, nextRect.height)
-              );
-          } else {
-              mergedRects.push(currentMergedRect);
-              currentMergedRect = nextRect;
-          }
+      if (gap <= H_TOLERANCE) {
+        // Check if they are adjacent enough to merge
+        const newRight = Math.max(currentMergedRect.right, nextRect.right);
+        currentMergedRect = new DOMRect(
+          currentMergedRect.left,
+          Math.min(currentMergedRect.top, nextRect.top),
+          newRight - currentMergedRect.left,
+          Math.max(currentMergedRect.height, nextRect.height)
+        );
+      } else {
+        mergedRects.push(currentMergedRect);
+        currentMergedRect = nextRect;
       }
-      mergedRects.push(currentMergedRect);
+    }
+    mergedRects.push(currentMergedRect);
   }
   /* --- END OPTIMIZATION LOGIC --- */
 
@@ -1699,21 +1747,23 @@ async function saveSelection() {
   const page = await pdfDoc.getPage(pageNum);
 
   const relativeRects = mergedRects.map(rect => ({
-      topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
-      leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
-      widthPercent: (rect.width / pageRect.width) * 100,
-      heightPercent: (rect.height / pageRect.height) * 100,
+    topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
+    leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
+    widthPercent: (rect.width / pageRect.width) * 100,
+    heightPercent: (rect.height / pageRect.height) * 100,
   }));
 
   // If filtering removed all rectangles, do not proceed.
   if (relativeRects.length === 0) {
-    console.log("Selection resulted in no valid highlight rectangles after filtering.");
+    console.log(
+      "Selection resulted in no valid highlight rectangles after filtering."
+    );
     selection.removeAllRanges();
     return;
   }
 
   const newHighlight = {
-    id: crypto.randomUUID(),    
+    id: crypto.randomUUID(),
     rects: relativeRects,
     url: shortUrl,
     text: selectedText,
@@ -1723,7 +1773,10 @@ async function saveSelection() {
     baseUrl: PDFViewerApplication.baseUrl,
     shared: false,
   };
-  window.parent.postMessage({ type: 'saveHighlight', payload: newHighlight }, '*');
+  window.parent.postMessage(
+    { type: "saveHighlight", payload: newHighlight },
+    "*"
+  );
   addHighlights([newHighlight]);
 }
 
@@ -1759,7 +1812,6 @@ function addHighlights(newHighlights) {
 async function drawHighlightsOnPage(pageNum) {
   const pdfDoc = PDFViewerApplication.pdfDocument;
   clearHighlightsOnPage(pageNum);
-  
 
   const pageContainer = document.querySelector(
     `.page[data-page-number='${pageNum}']`
@@ -1774,7 +1826,7 @@ async function drawHighlightsOnPage(pageNum) {
   const page = await pdfDoc.getPage(pageNum);
   const pageRect = pageContainer.getBoundingClientRect(); // Get current on-screen size
   let urlData = getBookUrlData();
-  let shortUrl =    
+  let shortUrl =
     "/books/" +
     urlData.bookParent +
     "/" +
@@ -1784,16 +1836,12 @@ async function drawHighlightsOnPage(pageNum) {
     "/pdf/" +
     urlData.pageNo;
 
-
   const highlightsToDraw = storedHighlights.filter(
-    h => (h.pageNo === pageNum
-      && h.url
-      && h.url.includes(shortUrl))
+    h => h.pageNo === pageNum && h.url && h.url.includes(shortUrl)
   );
 
   highlightsToDraw.forEach(highlight => {
     if (!highlight.rects || highlight.rects.length === 0) return;
-
 
     // 1. Create the group container. It's for logical grouping only.
     const group = document.createElement("div");
@@ -1837,7 +1885,6 @@ async function drawHighlightsOnPage(pageNum) {
     group.appendChild(deleteBtn);
 
     pageContainer.appendChild(group);
-    
   });
 }
 
@@ -1863,11 +1910,14 @@ function clearHighlightsOnPage(pageNum) {
 function handleDeleteClick(event) {
   const target = event.target;
   if (target.classList.contains("delete-highlight-btn")) {
-    event.stopPropagation(); 
+    event.stopPropagation();
     const highlightId = target.dataset.highlightId;
     if (highlightId) {
       deleteHighlight(highlightId);
-      window.parent.postMessage({ type: 'deleteHighlight', payload: highlightId }, '*');
+      window.parent.postMessage(
+        { type: "deleteHighlight", payload: highlightId },
+        "*"
+      );
     }
   }
 }
@@ -1877,7 +1927,6 @@ function deleteHighlight(id) {
   const index = storedHighlights.findIndex(h => h.id === id);
   if (index > -1) {
     storedHighlights.splice(index, 1);
-    
 
     // Remove from the DOM
     const groupElement = viewer.querySelector(
@@ -1894,14 +1943,14 @@ async function setupResizeObserver() {
   console.log("Resizing detected, redrawing highlights...");
   const pdfDoc = PDFViewerApplication.pdfDocument;
   if (!pdfDoc) return;
-  const current_pageNumber = PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber;  
+  const current_pageNumber =
+    PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber;
   await drawHighlightsOnPage(current_pageNumber);
-  
 }
 
 async function disableBookMarkButtonFor10Seconds() {
   // 1. Get the button element by its ID
-  const bookmarkButton = document.getElementById('bookMark');
+  const bookmarkButton = document.getElementById("bookMark");
 
   // Return early if the button doesn't exist to avoid errors
   if (!bookmarkButton) {
@@ -1910,15 +1959,13 @@ async function disableBookMarkButtonFor10Seconds() {
   }
 
   // 2. Disable the button
-  bookmarkButton.disabled = true;  
+  bookmarkButton.disabled = true;
 
   // 3. Set a timer to re-enable the button after 30 seconds (30000 milliseconds)
   setTimeout(() => {
     // 4. Re-enable the button
-    bookmarkButton.disabled = false;   
-       
-    
-  }, 10000); 
+    bookmarkButton.disabled = false;
+  }, 10000);
 }
 
 async function addBookMark() {
@@ -1946,27 +1993,29 @@ function getBookUrlData() {
   }
 }
 
-
 async function enableBackgroundPlayback() {
-    if (silentAudio) {
-        console.log("Background playback is already enabled.");
-        return;
-    }
-    await requestWakeLock();
-    console.log("Enabling background playback...");
-    silentAudio = new Audio();
-    silentAudio.src = SILENT_AUDIO_SRC;
-    silentAudio.loop = true; // Loop the silent audio to keep the session active
+  if (silentAudio) {
+    console.log("Background playback is already enabled.");
+    return;
+  }
+  await requestWakeLock();
+  console.log("Enabling background playback...");
+  silentAudio = new Audio();
+  silentAudio.src = SILENT_AUDIO_SRC;
+  silentAudio.loop = true; // Loop the silent audio to keep the session active
 
-    // We must wait for user interaction before playing audio.
-    // The button click that calls this function serves as that interaction.
-    silentAudio.play().then(() => {
-        console.log("Silent audio is now playing.");
-        setupMediaSession();
-    }).catch(error => {
-        console.error("Could not play silent audio:", error);
-        // In case of error, reset the state.
-        silentAudio = null;
+  // We must wait for user interaction before playing audio.
+  // The button click that calls this function serves as that interaction.
+  silentAudio
+    .play()
+    .then(() => {
+      console.log("Silent audio is now playing.");
+      setupMediaSession();
+    })
+    .catch(error => {
+      console.error("Could not play silent audio:", error);
+      // In case of error, reset the state.
+      silentAudio = null;
     });
 }
 
@@ -1975,17 +2024,17 @@ async function enableBackgroundPlayback() {
  * and clearing the Media Session.
  */
 async function disableBackgroundPlayback() {
-    if (!silentAudio) {
-        console.log("Background playback is not enabled.");
-        return;
-    }
-    await releaseWakeLock();
-    console.log("Disabling background playback...");
-    silentAudio.pause();
-    silentAudio.src = ''; // Release the audio source
-    silentAudio = null;
+  if (!silentAudio) {
+    console.log("Background playback is not enabled.");
+    return;
+  }
+  await releaseWakeLock();
+  console.log("Disabling background playback...");
+  silentAudio.pause();
+  silentAudio.src = ""; // Release the audio source
+  silentAudio = null;
 
-    clearMediaSession();
+  clearMediaSession();
 }
 
 /**
@@ -1994,73 +2043,96 @@ async function disableBackgroundPlayback() {
  * notification shade.
  */
 function setupMediaSession() {
-    if ('mediaSession' in navigator) {
-        console.log("Setting up Media Session...");
-        navigator.mediaSession.metadata = new MediaMetadata({
-            title: parent.document.title,
-            artist: 'BAWS.in',
-            album: "Dr. Babasaheb Ambedkar Writings and Speeches",
-            artwork: [
-                // Add a placeholder image for the media notification
-                { src: 'https://baws.in/baws_social_logo.png', sizes: '96x96', type: 'image/png' },
-                { src: 'https://baws.in/baws_social_logo.png', sizes: '128x128', type: 'image/png' },
-                { src: 'https://baws.in/baws_social_logo.png', sizes: '192x192', type: 'image/png' },
-                { src: 'https://baws.in/baws_social_logo.png', sizes: '256x256', type: 'image/png' },
-                { src: 'https://baws.in/baws_social_logo.png', sizes: '384x384', type: 'image/png' },
-                { src: 'https://baws.in/baws_social_logo.png', sizes: '512x512', type: 'image/png' },
-            ]
-        });
+  if ("mediaSession" in navigator) {
+    console.log("Setting up Media Session...");
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: parent.document.title,
+      artist: "BAWS.in",
+      album: "Dr. Babasaheb Ambedkar Writings and Speeches",
+      artwork: [
+        // Add a placeholder image for the media notification
+        {
+          src: "https://baws.in/baws_social_logo.png",
+          sizes: "96x96",
+          type: "image/png",
+        },
+        {
+          src: "https://baws.in/baws_social_logo.png",
+          sizes: "128x128",
+          type: "image/png",
+        },
+        {
+          src: "https://baws.in/baws_social_logo.png",
+          sizes: "192x192",
+          type: "image/png",
+        },
+        {
+          src: "https://baws.in/baws_social_logo.png",
+          sizes: "256x256",
+          type: "image/png",
+        },
+        {
+          src: "https://baws.in/baws_social_logo.png",
+          sizes: "384x384",
+          type: "image/png",
+        },
+        {
+          src: "https://baws.in/baws_social_logo.png",
+          sizes: "512x512",
+          type: "image/png",
+        },
+      ],
+    });
 
-        // Set up action handlers for media keys (play/pause from notification)
-        navigator.mediaSession.setActionHandler('play', () => {
-            console.log('Media Session: Play action received.');
-            // You could add logic here to resume speech synthesis if it was paused.
-            // For simplicity, we'll just log it.
-        });
-        navigator.mediaSession.setActionHandler('pause', () => {
-            console.log('Media Session: Pause action received.');
-            // This is a good place to stop speech synthesis.
-            speechSynthesis.cancel();
-        });
-    }
+    // Set up action handlers for media keys (play/pause from notification)
+    navigator.mediaSession.setActionHandler("play", () => {
+      console.log("Media Session: Play action received.");
+      // You could add logic here to resume speech synthesis if it was paused.
+      // For simplicity, we'll just log it.
+    });
+    navigator.mediaSession.setActionHandler("pause", () => {
+      console.log("Media Session: Pause action received.");
+      // This is a good place to stop speech synthesis.
+      speechSynthesis.cancel();
+    });
+  }
 }
 
 /**
  * Clears the Media Session metadata.
  */
 function clearMediaSession() {
-    if ('mediaSession' in navigator) {
-        console.log("Clearing Media Session...");
-        navigator.mediaSession.metadata = null;
-        navigator.mediaSession.setActionHandler('play', null);
-        navigator.mediaSession.setActionHandler('pause', null);
-    }
+  if ("mediaSession" in navigator) {
+    console.log("Clearing Media Session...");
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.setActionHandler("play", null);
+    navigator.mediaSession.setActionHandler("pause", null);
+  }
 }
 
 // Clean up when the user navigates away from the page
-window.addEventListener('beforeunload', async () => {
-    await disableBackgroundPlayback();
-    if (speechSynthesis.speaking) {
-        speechSynthesis.cancel();
-    }
+window.addEventListener("beforeunload", async () => {
+  await disableBackgroundPlayback();
+  if (speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+  }
 });
-
 
 /**
  * Initializes the speech rate from localStorage.
  * This function should be called when your application or audio player loads.
  */
 function initializeSpeechRate() {
-    const savedRate = localStorage.getItem(SPEECH_RATE_STORAGE_KEY);
-    if (savedRate) {
-        // If a rate is found in storage, parse it and set it.
-        audioMeta.rate = parseFloat(savedRate);
-    } else {
-        // Otherwise, use the default rate of 1.
-        audioMeta.rate = 0.95;
-    }
-    console.log("Speech rate initialized to:", audioMeta.rate);
-    // You might want to update a UI element to show the current rate here.
+  const savedRate = localStorage.getItem(SPEECH_RATE_STORAGE_KEY);
+  if (savedRate) {
+    // If a rate is found in storage, parse it and set it.
+    audioMeta.rate = parseFloat(savedRate);
+  } else {
+    // Otherwise, use the default rate of 1.
+    audioMeta.rate = 0.95;
+  }
+  console.log("Speech rate initialized to:", audioMeta.rate);
+  // You might want to update a UI element to show the current rate here.
 }
 
 /**
@@ -2068,18 +2140,21 @@ function initializeSpeechRate() {
  * It persists the new rate to localStorage.
  */
 function speedIncrease() {
-    // Set a maximum rate of 10.
-    const maxRate = 10;
-    // Use 0.1 as the increment step.
-    const newRate = Math.min(maxRate, parseFloat((audioMeta.rate + 0.1).toFixed(2)));
+  // Set a maximum rate of 10.
+  const maxRate = 10;
+  // Use 0.1 as the increment step.
+  const newRate = Math.min(
+    maxRate,
+    parseFloat((audioMeta.rate + 0.1).toFixed(2))
+  );
 
-    if (audioMeta.rate !== newRate) {
-        audioMeta.rate = newRate;
-        localStorage.setItem(SPEECH_RATE_STORAGE_KEY, audioMeta.rate);
-        console.log("Speech rate increased to:", audioMeta.rate);
-        // If speech is currently active, you might need to stop and restart it
-        // with the new rate for the change to take effect immediately.
-    }
+  if (audioMeta.rate !== newRate) {
+    audioMeta.rate = newRate;
+    localStorage.setItem(SPEECH_RATE_STORAGE_KEY, audioMeta.rate);
+    console.log("Speech rate increased to:", audioMeta.rate);
+    // If speech is currently active, you might need to stop and restart it
+    // with the new rate for the change to take effect immediately.
+  }
 }
 
 /**
@@ -2087,16 +2162,20 @@ function speedIncrease() {
  * It persists the new rate to localStorage.
  */
 function speedDecrease() {
-    // Set a minimum rate of 0.1.
-    const minRate = 0.1;
-    // Use 0.1 as the decrement step.
-    const newRate = Math.max(minRate, parseFloat((audioMeta.rate - 0.1).toFixed(2)));
+  // Set a minimum rate of 0.1.
+  const minRate = 0.1;
+  // Use 0.1 as the decrement step.
+  const newRate = Math.max(
+    minRate,
+    parseFloat((audioMeta.rate - 0.1).toFixed(2))
+  );
 
-    if (audioMeta.rate !== newRate) {
-        audioMeta.rate = newRate;
-        localStorage.setItem(SPEECH_RATE_STORAGE_KEY, audioMeta.rate);
-        console.log("Speech rate decreased to:", audioMeta.rate);
-        // If speech is currently active, you might need to stop and restart it
-        // with the new rate for the change to take effect immediately.
-    }
+  if (audioMeta.rate !== newRate) {
+    audioMeta.rate = newRate;
+    localStorage.setItem(SPEECH_RATE_STORAGE_KEY, audioMeta.rate);
+    console.log("Speech rate decreased to:", audioMeta.rate);
+    // If speech is currently active, you might need to stop and restart it
+    // with the new rate for the change to take effect immediately.
+  }
 }
+
