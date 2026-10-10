@@ -146,7 +146,11 @@ function getNormalizeWithNFKC() {
       }
     }
     if (ranges.join("") !== NormalizeWithNFKC) {
-      throw new Error(
+      // Newer browsers ship newer Unicode data than this string was built
+      // from. Throwing here (upstream behaviour) breaks every search in
+      // development mode, including the read-aloud sentence highlighting;
+      // built viewers never run this check, so just warn.
+      console.warn(
         "getNormalizeWithNFKC - update the `NormalizeWithNFKC` string."
       );
     }
