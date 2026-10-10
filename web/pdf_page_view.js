@@ -907,7 +907,37 @@ class PDFPageView {
                       postRenderActions();
                   }
               })
-              .catch(error => reject(`Error fetching the file: ${error.message}`));
+              .catch(error => {
+                // No text version for this page (missing or empty .md).
+                // Finish the page instead of rejecting: a rejected draw
+                // leaves it "running" and the rendering queue retries it
+                // forever.
+                console.warn(
+                  `Text view unavailable for page ${this.id}: ${error.message}`
+                );
+                if (div.innerHTML === "") {
+                  const notice = document.createElement("div");
+                  notice.classList.add("textView", "textViewUnavailable");
+                  notice.textContent =
+                    "The text version of this page isn't available. " +
+                    "Switch back to the original page to read it.";
+                  div.append(notice);
+                }
+                div.setAttribute("data-loaded", true);
+                this.renderingState = RenderingStates.FINISHED;
+                this.eventBus.dispatch("pagerendered", {
+                  source: this,
+                  pageNumber: this.id,
+                  cssTransform: true,
+                  timestamp: performance.now(),
+                  error,
+                });
+                this.eventBus.dispatch("textviewunavailable", {
+                  source: this,
+                  pageNumber: this.id,
+                });
+                resolve();
+              });
       });
     }
   

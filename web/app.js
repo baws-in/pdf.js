@@ -1322,9 +1322,13 @@ const PDFViewerApplication = {
     const pdfViewer = this.pdfViewer;
     // Size the page placeholders from the page being opened rather than page 1,
     // which for books is a cover with a different size.
-    const initialPageMatch = /(?:^|&)page=(\d+)/.exec(this.initialBookmark || "");
+    const initialPageMatch = /(?:^|&)page=(\d+)/.exec(
+      this.initialBookmark || ""
+    );
     pdfViewer.setDocument(pdfDocument, {
-      initialPageNumber: initialPageMatch ? parseInt(initialPageMatch[1], 10) : 1,
+      initialPageNumber: initialPageMatch
+        ? parseInt(initialPageMatch[1], 10)
+        : 1,
     });
     const { firstPagePromise, onePageRendered, pagesPromise } = pdfViewer;
 
@@ -1416,6 +1420,7 @@ const PDFViewerApplication = {
             scrollMode,
             spreadMode,
           });
+          const initialPageNumber = pdfViewer.currentPageNumber;
           this.eventBus.dispatch("documentinit", { source: this });
           // Make all navigation keys work on document load,
           // unless the viewer is embedded in a web page.
@@ -1438,6 +1443,11 @@ const PDFViewerApplication = {
             return;
           }
           if (pdfViewer.hasEqualPageSizes) {
+            return;
+          }
+          // Don't pull the reader back if they have already moved on (this
+          // runs up to FORCE_PAGES_LOADED_TIMEOUT after the document opened).
+          if (pdfViewer.currentPageNumber !== initialPageNumber) {
             return;
           }
           this.initialBookmark = initialBookmark;

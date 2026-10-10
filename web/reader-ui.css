@@ -1,0 +1,595 @@
+/*
+ * New BAWS reader UI (see reader-ui.js). Everything here is scoped to
+ * html.rui, which the flag script in viewer.html sets, so the old UI is
+ * unaffected when the flag is off.
+ */
+
+html.rui {
+  --rui-accent: #2347a0;
+  --rui-accent-ink: #2347a0;
+  --rui-accent-soft: #e3e9f7;
+  --rui-on-accent: #ffffff;
+  --rui-surface: rgba(255, 253, 248, 0.96);
+  --rui-surface-solid: #fffdf8;
+  --rui-tile: #f3f0e8;
+  --rui-hover: rgba(28, 27, 25, 0.06);
+  --rui-ink: #1c1b19;
+  --rui-ink-2: #3a3731;
+  --rui-muted: #6b665c;
+  --rui-line: #e6e1d6;
+  --rui-scrim: rgba(28, 27, 25, 0.38);
+  --rui-toast-bg: #1c1b19;
+  --rui-toast-fg: #fffdf8;
+  --rui-shadow: 0 10px 30px rgba(28, 27, 25, 0.18);
+
+  --rui-top-h: 56px;
+  --rui-bottom-h: 124px;
+  --rui-font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans",
+    sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.rui {
+    --rui-accent: #5b7fe0;
+    --rui-accent-ink: #9db4f2;
+    --rui-accent-soft: #2a3350;
+    --rui-surface: rgba(32, 35, 42, 0.96);
+    --rui-surface-solid: #20232a;
+    --rui-tile: #2a2e36;
+    --rui-hover: rgba(231, 228, 220, 0.08);
+    --rui-ink: #e7e4dc;
+    --rui-ink-2: #cfcbc2;
+    --rui-muted: #a3a09a;
+    --rui-line: #2e323b;
+    --rui-scrim: rgba(0, 0, 0, 0.5);
+    --rui-toast-bg: #e7e4dc;
+    --rui-toast-fg: #16181d;
+    --rui-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ---------- Replace the old chrome ---------- */
+
+html.rui .toolbar,
+html.rui #bawsBottomBar {
+  display: none !important;
+}
+
+html.rui #viewerContainer {
+  inset: 0;
+  /* A sideways swipe turns the page; don't let the browser treat the
+     overscroll as "go back" (that jumps through pdf.js's page history). */
+  overscroll-behavior-x: none;
+}
+
+html.rui,
+html.rui body {
+  overscroll-behavior-x: none;
+}
+
+/* Leave room so the first and last page can scroll clear of the bars. */
+html.rui #viewer {
+  padding-top: var(--rui-top-h);
+  padding-bottom: calc(var(--rui-bottom-h) + 24px);
+}
+
+html.rui #sidebarContainer {
+  inset-block: var(--rui-top-h) var(--rui-bottom-h);
+  height: auto;
+  z-index: 990;
+}
+
+html.rui .findbar {
+  position: fixed;
+  top: calc(var(--rui-top-h) + 8px);
+  inset-inline: 8px auto;
+  z-index: 1001;
+}
+
+/* ---------- Shared pieces ---------- */
+
+.rui-top,
+.rui-bottom,
+.rui-sheet,
+.rui-toast {
+  font-family: var(--rui-font);
+  color: var(--rui-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.rui-top button,
+.rui-bottom button,
+.rui-sheet button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.rui-top button:focus-visible,
+.rui-bottom button:focus-visible,
+.rui-sheet button:focus-visible,
+.rui-sheet input:focus-visible,
+.rui-scrub-range:focus-visible {
+  outline: 2px solid var(--rui-accent);
+  outline-offset: 2px;
+}
+
+.rui-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rui-icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rui-icon-btn:hover {
+  background: var(--rui-hover);
+}
+
+.rui-icon-btn[disabled],
+.rui-dock-btn[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------- Top bar ---------- */
+
+.rui-top {
+  position: fixed;
+  inset: 0 0 auto;
+  height: calc(var(--rui-top-h) + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 6px 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--rui-surface);
+  border-bottom: 1px solid var(--rui-line);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 1000;
+  transition:
+    transform 0.22s ease,
+    opacity 0.22s ease;
+}
+
+.rui-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  padding-inline: 4px;
+}
+
+.rui-title-sub {
+  font-size: 11px;
+  color: var(--rui-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rui-title-main {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Bottom bar: page slider + dock ---------- */
+
+.rui-bottom {
+  position: fixed;
+  inset: auto 0 0;
+  padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--rui-surface);
+  border-top: 1px solid var(--rui-line);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 1000;
+  transition:
+    transform 0.22s ease,
+    opacity 0.22s ease;
+}
+
+html.rui-chrome-hidden .rui-top {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+html.rui-chrome-hidden .rui-bottom {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rui-top,
+  .rui-bottom,
+  .rui-sheet,
+  .rui-scrim,
+  .rui-toast {
+    transition: none !important;
+  }
+}
+
+.rui-scrub {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rui-scrub-mid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rui-scrub-track {
+  position: relative;
+  height: 24px;
+}
+
+.rui-scrub-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rui-scrub-tick {
+  position: absolute;
+  top: 8px;
+  width: 2px;
+  height: 8px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--rui-muted);
+  opacity: 0.45;
+}
+
+.rui-scrub-range {
+  --rui-progress: 0%;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.rui-scrub-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--rui-accent) var(--rui-progress),
+    var(--rui-line) var(--rui-progress)
+  );
+}
+
+.rui-scrub-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--rui-accent) var(--rui-progress),
+    var(--rui-line) var(--rui-progress)
+  );
+}
+
+.rui-scrub-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: var(--rui-surface-solid);
+  border: 2px solid var(--rui-accent);
+  box-sizing: border-box;
+}
+
+.rui-scrub-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--rui-surface-solid);
+  border: 2px solid var(--rui-accent);
+  box-sizing: border-box;
+}
+
+.rui-scrub-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--rui-muted);
+  white-space: nowrap;
+}
+
+.rui-scrub-labels strong {
+  color: var(--rui-ink);
+  font-weight: 600;
+}
+
+.rui-scrub-bubble {
+  position: absolute;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--rui-toast-bg);
+  color: var(--rui-toast-fg);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.rui-dock {
+  display: grid;
+  grid-template-columns: repeat(var(--rui-dock-count, 5), minmax(0, 1fr));
+}
+
+.rui-dock-btn {
+  position: relative;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--rui-ink-2) !important;
+  border-radius: 14px;
+}
+
+.rui-dock-btn:hover {
+  background: var(--rui-hover) !important;
+}
+
+.rui-dock-btn[aria-pressed="true"] {
+  color: var(--rui-accent-ink) !important;
+}
+
+/* ---------- Sheets ---------- */
+
+.rui-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--rui-scrim);
+  z-index: 1059;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.rui-scrim.rui-open {
+  opacity: 1;
+}
+
+.rui-sheet {
+  position: fixed;
+  inset: auto 0 0;
+  max-height: 82vh;
+  overflow: auto;
+  padding: 10px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  background: var(--rui-surface-solid);
+  border-radius: 24px 24px 0 0;
+  box-shadow: var(--rui-shadow);
+  z-index: 1060;
+  transform: translateY(100%);
+  transition: transform 0.24s ease;
+}
+
+.rui-sheet.rui-open {
+  transform: translateY(0);
+}
+
+.rui-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rui-line);
+  margin: 0 auto 12px;
+}
+
+.rui-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.rui-sheet-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.rui-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.rui-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rui-muted);
+  padding-inline-start: 4px;
+}
+
+.rui-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rui-tile {
+  min-height: 76px;
+  padding: 8px 4px !important;
+  border-radius: 16px;
+  background: var(--rui-tile) !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.rui-tile[aria-pressed="true"] {
+  background: var(--rui-accent-soft) !important;
+  color: var(--rui-accent-ink) !important;
+  font-weight: 500;
+}
+
+.rui-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.rui-input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 23px;
+  border: 1px solid var(--rui-line);
+  background: var(--rui-surface-solid);
+  color: var(--rui-ink);
+  font: inherit;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.rui-primary {
+  height: 46px;
+  padding: 0 20px !important;
+  border-radius: 23px;
+  background: var(--rui-accent) !important;
+  color: var(--rui-on-accent) !important;
+  font-weight: 600 !important;
+}
+
+.rui-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Toasts ---------- */
+
+.rui-toasts {
+  position: fixed;
+  inset: calc(var(--rui-top-h) + 10px) 12px auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 1080;
+  pointer-events: none;
+}
+
+.rui-toast {
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  border-radius: 18px;
+  background: var(--rui-toast-bg);
+  color: var(--rui-toast-fg);
+  box-shadow: var(--rui-shadow);
+  font-size: 13px;
+  line-height: 1.35;
+  pointer-events: auto;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.rui-toast.rui-leaving {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.rui-toast button {
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+
+/* ---------- Larger screens ---------- */
+
+@media (min-width: 900px) {
+  html.rui {
+    --rui-bottom-h: 72px;
+  }
+
+  .rui-bottom {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding-inline: 16px;
+  }
+
+  .rui-scrub {
+    flex: 1;
+  }
+
+  .rui-dock {
+    width: auto;
+    grid-template-columns: repeat(var(--rui-dock-count, 5), 76px);
+  }
+
+  .rui-sheet {
+    inset: auto 0 16px;
+    margin-inline: auto;
+    width: min(560px, calc(100% - 32px));
+    border-radius: 24px;
+  }
+}

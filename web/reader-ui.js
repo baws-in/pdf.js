@@ -1,0 +1,1148 @@
+/*
+ * New BAWS reader UI, behind a feature flag (see the script at the top of
+ * viewer.html: "ui=2" in the URL or localStorage.readerUI = "2").
+ *
+ * Builds the top bar, page slider, bottom dock, "More" sheet and toasts.
+ * Every button comes from one action registry, so a new tool is one
+ * registerAction() call; where it shows up (dock, top bar, More sheet) is a
+ * property of the action. The work itself is done by the existing functions
+ * in viewer-flexi.js (openNextPage, addBookMark, shareButtonClick, ...).
+ *
+ * Gestures: text selection always wins. A tap only toggles the controls when
+ * it is short, still, not part of a double tap and leaves no selection;
+ * swipes (touch only) turn pages when nothing is selected and the page is not
+ * scrolled sideways.
+ */
+(function () {
+  "use strict";
+
+  if (window.BAWS_READER_UI !== 2) {
+    return;
+  }
+
+  const TAP_MAX_MS = 250;
+  const TAP_MAX_MOVE = 10;
+  const DOUBLE_TAP_WAIT = 320;
+  const SWIPE_MIN_X = 60;
+  const SWIPE_MAX_MS = 600;
+  const LONG_PRESS_MS = 600;
+  const SCROLL_HIDE_DELTA = 8;
+
+  // Lucide-style 24px stroke icons.
+  const ICONS = {
+    back: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    search: '<circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3"/>',
+    contents: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    listen:
+      '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+    highlight:
+      '<path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>',
+    share:
+      '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/>',
+    more: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    prev: '<path d="m15 18-6-6 6-6"/>',
+    next: '<path d="m9 18 6-6-6-6"/>',
+    close: '<path d="M18 6 6 18M6 6l12 12"/>',
+    page: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M9 13h6M9 17h3"/>',
+    phone:
+      '<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/>',
+    fullscreen:
+      '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
+    zoomIn:
+      '<circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>',
+    zoomOut:
+      '<circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3M8 11h6"/>',
+    qr: '<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    image:
+      '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+  };
+
+  function icon(name) {
+    return (
+      '<svg class="rui-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+      (ICONS[name] || "") +
+      "</svg>"
+    );
+  }
+
+  function el(tag, className, attrs) {
+    const node = document.createElement(tag);
+    if (className) {
+      node.className = className;
+    }
+    for (const [key, value] of Object.entries(attrs || {})) {
+      node.setAttribute(key, value);
+    }
+    return node;
+  }
+
+  function hasSelection() {
+    const selection = window.getSelection();
+    return (
+      !!selection &&
+      !selection.isCollapsed &&
+      selection.toString().trim().length > 0
+    );
+  }
+
+  function app() {
+    return window.PDFViewerApplication;
+  }
+
+  function storageGet(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  function storageSet(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+  }
+
+  // ---------------------------------------------------------------------
+  // Action registry
+  // ---------------------------------------------------------------------
+
+  /**
+   * @typedef {Object} ReaderAction
+   * @property {string} id
+   * @property {string|function} label
+   * @property {string} icon - key of ICONS
+   * @property {Array<string>} placements - "top-start", "top-end", "dock",
+   *   "more"
+   * @property {string} [group] - More sheet group title
+   * @property {number} [priority] - higher comes first
+   * @property {string} [elementId] - DOM id for the button (kept stable for
+   *   the app's tutorial, e.g. "bookMark", "shareButton")
+   * @property {function} [run]
+   * @property {function} [longPress]
+   * @property {function} [pressed] - returns true for a toggled-on state
+   * @property {function} [visible] - returns false to hide
+   */
+  const actions = new Map();
+
+  function registerAction(action) {
+    actions.set(action.id, { priority: 0, ...action });
+    if (chromeBuilt) {
+      renderBars();
+    }
+  }
+
+  function actionsFor(placement) {
+    return [...actions.values()]
+      .filter(a => a.placements.includes(placement))
+      .filter(a => !a.visible || a.visible())
+      .sort((a, b) => b.priority - a.priority);
+  }
+
+  function labelOf(action) {
+    return typeof action.label === "function" ? action.label() : action.label;
+  }
+
+  function wireButton(button, action) {
+    let pressTimer = null;
+    let longPressed = false;
+    if (action.longPress) {
+      const start = () => {
+        longPressed = false;
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => {
+          longPressed = true;
+          action.longPress(button);
+        }, LONG_PRESS_MS);
+      };
+      const cancel = () => clearTimeout(pressTimer);
+      button.addEventListener("pointerdown", start);
+      button.addEventListener("pointerup", cancel);
+      button.addEventListener("pointerleave", cancel);
+      button.addEventListener("pointercancel", cancel);
+      button.addEventListener("contextmenu", e => e.preventDefault());
+    }
+    button.addEventListener("click", event => {
+      if (longPressed) {
+        longPressed = false;
+        return;
+      }
+      action.run?.(event, button);
+    });
+  }
+
+  function makeIconButton(action) {
+    const button = el("button", "rui-icon-btn", {
+      type: "button",
+      "aria-label": labelOf(action),
+      title: labelOf(action),
+    });
+    if (action.elementId) {
+      button.id = action.elementId;
+    }
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    button.innerHTML = icon(action.icon);
+    wireButton(button, action);
+    return button;
+  }
+
+  function makeDockButton(action) {
+    const button = el("button", "rui-dock-btn", { type: "button" });
+    if (action.elementId) {
+      button.id = action.elementId;
+    }
+    if (action.pressed) {
+      button.setAttribute("aria-pressed", String(!!action.pressed()));
+    }
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    button.innerHTML = icon(action.icon) + "<span></span>";
+    button.querySelector("span").textContent = labelOf(action);
+    wireButton(button, action);
+    return button;
+  }
+
+  function makeTile(action) {
+    const button = el("button", "rui-tile", { type: "button" });
+    if (action.pressed) {
+      button.setAttribute("aria-pressed", String(!!action.pressed()));
+    }
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    button.innerHTML = icon(action.icon) + "<span></span>";
+    button.querySelector("span").textContent = labelOf(action);
+    wireButton(button, action);
+    return button;
+  }
+
+  // ---------------------------------------------------------------------
+  // Chrome (top bar, bottom bar, toasts)
+  // ---------------------------------------------------------------------
+
+  let chromeBuilt = false;
+  const ui = {};
+
+  function buildChrome() {
+    // The old bottom bar shares ids (bookMark, shareButton, voiceButton...)
+    // with the new controls, so it has to go before they are created.
+    document.getElementById("bawsBottomBar")?.remove();
+
+    const host = document.getElementById("outerContainer") || document.body;
+
+    ui.top = el("header", "rui-top");
+    ui.topStart = el("div", "", { style: "display:flex" });
+    ui.title = el("div", "rui-title");
+    ui.titleSub = el("span", "rui-title-sub");
+    ui.titleMain = el("span", "rui-title-main");
+    ui.title.append(ui.titleSub, ui.titleMain);
+    ui.topEnd = el("div", "", { style: "display:flex" });
+    ui.top.append(ui.topStart, ui.title, ui.topEnd);
+
+    ui.bottom = el("div", "rui-bottom");
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    ui.bottom.innerHTML =
+      '<div class="rui-scrub">' +
+      '<button type="button" class="rui-icon-btn" data-rui="prev" aria-label="Previous page" title="Previous page">' +
+      icon("prev") +
+      "</button>" +
+      '<div class="rui-scrub-mid">' +
+      '<div class="rui-scrub-track">' +
+      '<div class="rui-scrub-ticks"></div>' +
+      '<input type="range" class="rui-scrub-range" min="1" max="1" value="1" step="1" aria-label="Page">' +
+      '<div class="rui-scrub-bubble" hidden></div>' +
+      "</div>" +
+      '<div class="rui-scrub-labels"><span data-rui="page"></span><span data-rui="hint"></span></div>' +
+      "</div>" +
+      '<button type="button" class="rui-icon-btn" data-rui="next" aria-label="Next page" title="Next page">' +
+      icon("next") +
+      "</button>" +
+      "</div>" +
+      '<nav class="rui-dock" aria-label="Reader tools"></nav>';
+    ui.range = ui.bottom.querySelector(".rui-scrub-range");
+    ui.ticks = ui.bottom.querySelector(".rui-scrub-ticks");
+    ui.bubble = ui.bottom.querySelector(".rui-scrub-bubble");
+    ui.pageLabel = ui.bottom.querySelector('[data-rui="page"]');
+    ui.pageHint = ui.bottom.querySelector('[data-rui="hint"]');
+    ui.dock = ui.bottom.querySelector(".rui-dock");
+
+    ui.toasts = el("div", "rui-toasts", {
+      role: "status",
+      "aria-live": "polite",
+    });
+
+    host.append(ui.top, ui.bottom, ui.toasts);
+
+    ui.bottom
+      .querySelector('[data-rui="prev"]')
+      .addEventListener("click", () => navigate("prev"));
+    ui.bottom
+      .querySelector('[data-rui="next"]')
+      .addEventListener("click", () => navigate("next"));
+    wireRange();
+
+    chromeBuilt = true;
+    renderBars();
+  }
+
+  function renderBars() {
+    ui.topStart.replaceChildren(...actionsFor("top-start").map(makeIconButton));
+    ui.topEnd.replaceChildren(...actionsFor("top-end").map(makeIconButton));
+    const dockActions = actionsFor("dock").slice(0, 5);
+    ui.dock.style.setProperty("--rui-dock-count", dockActions.length);
+    ui.dock.replaceChildren(...dockActions.map(makeDockButton));
+  }
+
+  function refreshPressedStates() {
+    for (const action of actions.values()) {
+      if (!action.pressed || !action.elementId) {
+        continue;
+      }
+      document
+        .getElementById(action.elementId)
+        ?.setAttribute("aria-pressed", String(!!action.pressed()));
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Show / hide the controls
+  // ---------------------------------------------------------------------
+
+  let chromeHidden = false;
+  let suppressScrollUntil = 0;
+
+  function setChromeHidden(hidden) {
+    if (hidden && (sheetOpen || hasSelection())) {
+      return;
+    }
+    chromeHidden = hidden;
+    document.documentElement.classList.toggle("rui-chrome-hidden", hidden);
+    ui.top.inert = hidden;
+    ui.bottom.inert = hidden;
+  }
+
+  function toggleChrome() {
+    setChromeHidden(!chromeHidden);
+  }
+
+  /** Navigation we start ourselves shouldn't count as "reading forward". */
+  function navigate(direction) {
+    suppressScrollUntil = performance.now() + 800;
+    if (direction === "next") {
+      window.openNextPage?.();
+    } else {
+      window.openPrevPage?.();
+    }
+  }
+
+  function wireScrollHiding(container) {
+    let lastTop = container.scrollTop;
+    let ticking = false;
+    container.addEventListener(
+      "scroll",
+      () => {
+        if (ticking) {
+          return;
+        }
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          const top = container.scrollTop;
+          const delta = top - lastTop;
+          if (Math.abs(delta) < SCROLL_HIDE_DELTA) {
+            return;
+          }
+          lastTop = top;
+          if (performance.now() < suppressScrollUntil) {
+            return;
+          }
+          if (delta > 0 && top > 80) {
+            setChromeHidden(true);
+          } else if (delta < 0) {
+            setChromeHidden(false);
+          }
+        });
+      },
+      { passive: true }
+    );
+  }
+
+  const INTERACTIVE =
+    "a, button, input, select, textarea, label, [contenteditable], " +
+    ".highlight-group, .delete-highlight-btn, .annotationLayer section, " +
+    "[data-rui-no-tap]";
+
+  function wireGestures(container) {
+    let touch = null;
+    let pendingTap = null;
+    let lastTouchEnd = 0;
+
+    const cancelPendingTap = () => {
+      if (pendingTap) {
+        clearTimeout(pendingTap);
+        pendingTap = null;
+        return true;
+      }
+      return false;
+    };
+
+    const scheduleTap = () => {
+      pendingTap = setTimeout(() => {
+        pendingTap = null;
+        if (!hasSelection()) {
+          toggleChrome();
+        }
+      }, DOUBLE_TAP_WAIT);
+    };
+
+    // --- Touch: taps and swipes ---
+    container.addEventListener(
+      "touchstart",
+      event => {
+        if (event.touches.length !== 1) {
+          touch = null; // pinch or multi-finger: not ours
+          return;
+        }
+        const t = event.touches[0];
+        touch = {
+          x: t.clientX,
+          y: t.clientY,
+          time: performance.now(),
+          hadSelection: hasSelection(),
+          secondTap: cancelPendingTap(),
+          interactive: !!event.target.closest?.(INTERACTIVE),
+        };
+      },
+      { passive: true }
+    );
+
+    container.addEventListener("touchcancel", () => (touch = null), {
+      passive: true,
+    });
+
+    // Once a touch is clearly a sideways page-turn swipe, stop the browser
+    // from also treating it as "swipe to go back" (which jumps through
+    // pdf.js's page history). Slow starts (long press, selection handles)
+    // and vertical moves are left alone.
+    container.addEventListener(
+      "touchmove",
+      event => {
+        if (
+          !touch ||
+          event.touches.length !== 1 ||
+          touch.hadSelection ||
+          sheetOpen ||
+          storageGet("readerSwipe") === "0"
+        ) {
+          return;
+        }
+        const t = event.touches[0];
+        const dx = t.clientX - touch.x;
+        const dy = t.clientY - touch.y;
+        if (touch.axis === undefined && Math.hypot(dx, dy) > 8) {
+          touch.axis = Math.abs(dx) > 1.5 * Math.abs(dy) ? "x" : "y";
+          touch.axisAt = performance.now() - touch.time;
+        }
+        if (touch.axis !== "x" || touch.axisAt > 300 || hasSelection()) {
+          return;
+        }
+        const atRight =
+          container.scrollLeft + container.clientWidth >=
+          container.scrollWidth - 2;
+        const atLeft = container.scrollLeft <= 2;
+        if (((dx < 0 && atRight) || (dx > 0 && atLeft)) && event.cancelable) {
+          event.preventDefault();
+        }
+      },
+      { passive: false }
+    );
+
+    container.addEventListener(
+      "touchend",
+      event => {
+        lastTouchEnd = performance.now();
+        const start = touch;
+        touch = null;
+        if (!start || event.touches.length > 0) {
+          return;
+        }
+        const t = event.changedTouches[0];
+        const dx = t.clientX - start.x;
+        const dy = t.clientY - start.y;
+        const dt = performance.now() - start.time;
+
+        if (
+          Math.abs(dx) >= SWIPE_MIN_X &&
+          Math.abs(dx) > 2 * Math.abs(dy) &&
+          dt <= SWIPE_MAX_MS &&
+          !start.hadSelection &&
+          !hasSelection() &&
+          !sheetOpen &&
+          storageGet("readerSwipe") !== "0"
+        ) {
+          // When zoomed in, a sideways swipe scrolls first; only turn the
+          // page once the view is already at that edge.
+          const atRight =
+            container.scrollLeft + container.clientWidth >=
+            container.scrollWidth - 2;
+          const atLeft = container.scrollLeft <= 2;
+          // Swiping through pages is reading: get the controls out of the way.
+          if (dx < 0 && atRight) {
+            navigate("next");
+            setChromeHidden(true);
+          } else if (dx > 0 && atLeft) {
+            navigate("prev");
+            setChromeHidden(true);
+          }
+          return;
+        }
+
+        if (
+          dt <= TAP_MAX_MS &&
+          Math.hypot(dx, dy) <= TAP_MAX_MOVE &&
+          !start.hadSelection &&
+          !start.secondTap &&
+          !start.interactive
+        ) {
+          scheduleTap();
+        }
+      },
+      { passive: true }
+    );
+
+    // --- Mouse: single clicks only; drags select text ---
+    let mouseDown = null;
+    container.addEventListener("mousedown", event => {
+      mouseDown = {
+        x: event.clientX,
+        y: event.clientY,
+        time: performance.now(),
+        hadSelection: hasSelection(),
+      };
+    });
+    container.addEventListener("click", event => {
+      // Touch also produces a click; that case is handled above.
+      if (performance.now() - lastTouchEnd < 800 || !mouseDown) {
+        return;
+      }
+      const start = mouseDown;
+      mouseDown = null;
+      if (event.detail > 1) {
+        cancelPendingTap(); // double click selects a word
+        return;
+      }
+      const moved = Math.hypot(
+        event.clientX - start.x,
+        event.clientY - start.y
+      );
+      if (
+        moved <= TAP_MAX_MOVE &&
+        performance.now() - start.time <= 400 &&
+        !start.hadSelection &&
+        !event.target.closest?.(INTERACTIVE)
+      ) {
+        scheduleTap();
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Page slider, titles
+  // ---------------------------------------------------------------------
+
+  let scrubbing = false;
+
+  function pagesCount() {
+    return app()?.pagesCount || 0;
+  }
+
+  function currentPage() {
+    return app()?.page || 1;
+  }
+
+  function outline() {
+    const tree = app()?.outline;
+    return tree && Array.isArray(tree.items) ? tree : null;
+  }
+
+  /** Outline nodes containing `page`, outermost first (without the root). */
+  function outlinePath(page) {
+    const tree = outline();
+    const path = [];
+    if (!tree) {
+      return path;
+    }
+    let nodes = tree.items;
+    while (nodes) {
+      const node = nodes.find(n => page >= n.dest && page <= n.end);
+      if (!node) {
+        break;
+      }
+      path.push(node);
+      nodes = node.items;
+    }
+    return path;
+  }
+
+  function bookLabel() {
+    try {
+      if (window.parent !== window && window.parent.document.title) {
+        return window.parent.document.title;
+      }
+    } catch {
+      // Cross-origin parent; fall back to the PDF's own title.
+    }
+    return document.title || "";
+  }
+
+  function wireRange() {
+    const range = ui.range;
+    const showBubble = () => {
+      const page = Number(range.value);
+      const section = outlinePath(page).at(-1)?.title;
+      ui.bubble.textContent = section ? `${page} · ${section}` : `Page ${page}`;
+      ui.bubble.hidden = false;
+      const max = Number(range.max) || 1;
+      const ratio = max > 1 ? (page - 1) / (max - 1) : 0;
+      ui.bubble.style.left = `${ratio * 100}%`;
+      setRangeProgress(page);
+    };
+    range.addEventListener("input", () => {
+      scrubbing = true;
+      showBubble();
+    });
+    range.addEventListener("change", () => {
+      scrubbing = false;
+      ui.bubble.hidden = true;
+      suppressScrollUntil = performance.now() + 800;
+      if (app()) {
+        app().page = Number(range.value);
+      }
+    });
+    range.addEventListener("blur", () => {
+      scrubbing = false;
+      ui.bubble.hidden = true;
+    });
+  }
+
+  function setRangeProgress(page) {
+    const max = Number(ui.range.max) || 1;
+    const ratio = max > 1 ? (page - 1) / (max - 1) : 0;
+    ui.range.style.setProperty("--rui-progress", `${ratio * 100}%`);
+  }
+
+  function renderTicks() {
+    const tree = outline();
+    const total = pagesCount();
+    ui.ticks.replaceChildren();
+    if (!tree || total < 2) {
+      return;
+    }
+    // Chapters: the second level when the volume holds several books.
+    let chapters = tree.items;
+    if (chapters.length <= 3 && chapters.some(n => n.items?.length)) {
+      chapters = chapters.flatMap(n => (n.items?.length ? n.items : [n]));
+    }
+    for (const node of chapters) {
+      if (!(node.dest >= 1 && node.dest <= total)) {
+        continue;
+      }
+      const tick = el("span", "rui-scrub-tick");
+      tick.style.left = `${((node.dest - 1) / (total - 1)) * 100}%`;
+      ui.ticks.append(tick);
+    }
+  }
+
+  function updatePageUI() {
+    const total = pagesCount();
+    const page = currentPage();
+    if (!total) {
+      return;
+    }
+    ui.range.max = String(total);
+    if (!scrubbing) {
+      ui.range.value = String(page);
+      setRangeProgress(page);
+    }
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    ui.pageLabel.replaceChildren();
+    ui.pageLabel.append("Page ");
+    const strong = document.createElement("strong");
+    strong.textContent = String(page);
+    ui.pageLabel.append(strong, ` of ${total}`);
+
+    const path = outlinePath(page);
+    const section = path.at(-1);
+    if (section && section.end >= page) {
+      const left = section.end - page;
+      ui.pageHint.textContent =
+        left === 0
+          ? "Last page of chapter"
+          : `${left} page${left === 1 ? "" : "s"} left in chapter`;
+    } else {
+      ui.pageHint.textContent = "";
+    }
+
+    const book = bookLabel();
+    if (section) {
+      ui.titleSub.textContent = book;
+      ui.titleMain.textContent = section.title.replaceAll(/\s+/g, " ").trim();
+    } else {
+      ui.titleSub.textContent = `Page ${page}`;
+      ui.titleMain.textContent = book;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Sheets
+  // ---------------------------------------------------------------------
+
+  let sheetOpen = null;
+
+  /**
+   * Opens a bottom sheet (a centered panel on wide screens).
+   * @param {string} title
+   * @param {function(HTMLElement): void} build - fills the sheet body
+   */
+  function openSheet(title, build) {
+    closeSheet(true);
+    const returnFocus = document.activeElement;
+    const scrim = el("div", "rui-scrim");
+    const sheet = el("div", "rui-sheet", {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": title,
+    });
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    sheet.innerHTML =
+      '<div class="rui-sheet-handle" aria-hidden="true"></div>' +
+      '<div class="rui-sheet-head"><span class="rui-sheet-title"></span>' +
+      '<button type="button" class="rui-icon-btn" aria-label="Close">' +
+      icon("close") +
+      "</button></div>" +
+      '<div class="rui-sheet-body"></div>';
+    sheet.querySelector(".rui-sheet-title").textContent = title;
+    build(sheet.querySelector(".rui-sheet-body"));
+
+    const host = document.getElementById("outerContainer") || document.body;
+    host.append(scrim, sheet);
+    scrim.addEventListener("click", () => closeSheet());
+    sheet
+      .querySelector(".rui-sheet-head button")
+      .addEventListener("click", () => closeSheet());
+    const onKey = event => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        closeSheet();
+      }
+    };
+    sheet.addEventListener("keydown", onKey);
+
+    sheetOpen = { scrim, sheet, returnFocus };
+    requestAnimationFrame(() => {
+      scrim.classList.add("rui-open");
+      sheet.classList.add("rui-open");
+      (
+        sheet.querySelector(".rui-sheet-body input, .rui-sheet-body button") ||
+        sheet.querySelector("button")
+      )?.focus();
+    });
+  }
+
+  function closeSheet(immediate = false) {
+    if (!sheetOpen) {
+      return;
+    }
+    const { scrim, sheet, returnFocus } = sheetOpen;
+    sheetOpen = null;
+    if (immediate) {
+      scrim.remove();
+      sheet.remove();
+    } else {
+      scrim.classList.remove("rui-open");
+      sheet.classList.remove("rui-open");
+      setTimeout(() => {
+        scrim.remove();
+        sheet.remove();
+      }, 260);
+    }
+    returnFocus?.focus?.();
+  }
+
+  function openMoreSheet() {
+    openSheet("More", body => {
+      const groups = new Map();
+      for (const action of actionsFor("more")) {
+        const group = action.group || "Tools";
+        if (!groups.has(group)) {
+          groups.set(group, []);
+        }
+        groups.get(group).push(action);
+      }
+      for (const [title, list] of groups) {
+        const section = el("div", "rui-group");
+        const heading = el("span", "rui-group-title");
+        heading.textContent = title;
+        const tiles = el("div", "rui-tiles");
+        for (const action of list) {
+          const tile = makeTile(action);
+          tile.addEventListener("click", () => {
+            if (!action.keepSheetOpen) {
+              closeSheet();
+            }
+          });
+          tiles.append(tile);
+        }
+        section.append(heading, tiles);
+        body.append(section);
+      }
+    });
+  }
+
+  function openGoToPage() {
+    openSheet("Go to page", body => {
+      const form = el("form", "rui-form");
+      const label = el("label", "rui-visually-hidden", { for: "ruiGoToInput" });
+      label.textContent = `Page number, 1 to ${pagesCount()}`;
+      const input = el("input", "rui-input", {
+        id: "ruiGoToInput",
+        type: "number",
+        inputmode: "numeric",
+        min: "1",
+        max: String(pagesCount()),
+        placeholder: `1 – ${pagesCount()}`,
+      });
+      input.value = String(currentPage());
+      const go = el("button", "rui-primary", { type: "submit" });
+      go.textContent = "Go";
+      form.append(label, input, go);
+      form.addEventListener("submit", event => {
+        event.preventDefault();
+        const page = parseInt(input.value, 10);
+        if (page >= 1 && page <= pagesCount()) {
+          suppressScrollUntil = performance.now() + 800;
+          app().page = page;
+          closeSheet();
+        } else {
+          input.select();
+        }
+      });
+      body.append(form);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Toasts
+  // ---------------------------------------------------------------------
+
+  /**
+   * @param {string} message
+   * @param {Object} [options]
+   * @param {string} [options.actionLabel]
+   * @param {function} [options.onAction]
+   * @param {number} [options.timeout] - ms; 0 keeps it until dismissed
+   */
+  function toast(message, { actionLabel, onAction, timeout = 4000 } = {}) {
+    const node = el("div", "rui-toast");
+    const text = el("span");
+    text.textContent = message;
+    node.append(text);
+    const dismiss = () => {
+      node.classList.add("rui-leaving");
+      setTimeout(() => node.remove(), 220);
+    };
+    if (actionLabel) {
+      const button = el("button", "", { type: "button" });
+      button.textContent = actionLabel;
+      button.addEventListener("click", () => {
+        onAction?.();
+        dismiss();
+      });
+      node.append(button);
+    }
+    ui.toasts.append(node);
+    if (timeout) {
+      setTimeout(dismiss, timeout);
+    }
+    return dismiss;
+  }
+
+  // ---------------------------------------------------------------------
+  // Built-in actions
+  // ---------------------------------------------------------------------
+
+  function shortPageUrl() {
+    const data = window.getBookUrlData?.();
+    if (!data) {
+      return location.href;
+    }
+    const host =
+      location.hostname === "localhost" ? "baws.in" : location.hostname;
+    return (
+      `https://${host}/books/${data.bookParent}/${data.language}/` +
+      `${data.bookName}/pdf/${data.pageNo}`
+    );
+  }
+
+  function registerBuiltInActions() {
+    registerAction({
+      id: "back",
+      label: "Back to library",
+      icon: "back",
+      placements: ["top-start"],
+      elementId: "leaveButton",
+      run: () => window.loadSearchPage?.(),
+    });
+    registerAction({
+      id: "search",
+      label: "Search in book",
+      icon: "search",
+      placements: ["top-end"],
+      priority: 10,
+      run: () => app()?.findBar?.toggle(),
+    });
+
+    registerAction({
+      id: "contents",
+      label: "Contents",
+      icon: "contents",
+      placements: ["dock"],
+      priority: 50,
+      elementId: "ruiContents",
+      run: () => app()?.pdfSidebar?.toggle(),
+    });
+    registerAction({
+      id: "listen",
+      label: "Listen",
+      icon: "listen",
+      placements: ["dock"],
+      priority: 40,
+      elementId: "voiceButton",
+      pressed: () => !!window.audioMeta?.isSpeaking,
+      run: () => window.showVoicePanel?.(),
+    });
+    registerAction({
+      id: "highlight",
+      label: "Highlight",
+      icon: "highlight",
+      placements: ["dock"],
+      priority: 30,
+      elementId: "bookMark",
+      run: () => {
+        if (!hasSelection()) {
+          toast("Select some text first, then tap Highlight.");
+          return;
+        }
+        window.addBookMark?.();
+      },
+    });
+    registerAction({
+      id: "share",
+      label: "Share",
+      icon: "share",
+      placements: ["dock"],
+      priority: 20,
+      elementId: "shareButton",
+      run: () => window.shareButtonClick?.(false),
+      longPress: () => window.shareButtonClick?.(true),
+    });
+    registerAction({
+      id: "more",
+      label: "More",
+      icon: "more",
+      placements: ["dock"],
+      priority: -100,
+      elementId: "ruiMore",
+      run: openMoreSheet,
+    });
+
+    // More sheet: Reading
+    registerAction({
+      id: "goToPage",
+      label: "Go to page",
+      icon: "page",
+      placements: ["more"],
+      group: "Reading",
+      priority: 100,
+      keepSheetOpen: true,
+      run: openGoToPage,
+    });
+    registerAction({
+      id: "fitToPhone",
+      label() {
+        return window.VIEW_MODE === "text" ? "Original page" : "Fit to phone";
+      },
+      icon: "phone",
+      placements: ["more"],
+      group: "Reading",
+      priority: 90,
+      pressed: () => window.VIEW_MODE === "text",
+      // toggleView is a top-level const in viewer-flexi.js: reachable by
+      // name from this script, but not as a window property.
+      // eslint-disable-next-line no-undef
+      run: () => typeof toggleView === "function" && toggleView(),
+    });
+    registerAction({
+      id: "fullscreen",
+      label() {
+        return window.flexi_isFullscreen ? "Exit fullscreen" : "Fullscreen";
+      },
+      icon: "fullscreen",
+      placements: ["more"],
+      group: "Reading",
+      priority: 80,
+      visible: () =>
+        !!document.getElementById("outerContainer")?.requestFullscreen,
+      run: () => window.fullScreen?.(),
+    });
+    registerAction({
+      id: "zoomOut",
+      label: "Zoom out",
+      icon: "zoomOut",
+      placements: ["top-end"],
+      priority: 30,
+      run: () => app()?.zoomOut(),
+    });
+    registerAction({
+      id: "zoomIn",
+      label: "Zoom in",
+      icon: "zoomIn",
+      placements: ["top-end"],
+      priority: 20,
+      run: () => app()?.zoomIn(),
+    });
+
+    // More sheet: Share
+    registerAction({
+      id: "sharePage",
+      label: "Page image",
+      icon: "image",
+      placements: ["more"],
+      group: "Share",
+      priority: 50,
+      run: () => window.shareButtonClick?.(false),
+    });
+    registerAction({
+      id: "shareQr",
+      label: "QR code",
+      icon: "qr",
+      placements: ["more"],
+      group: "Share",
+      priority: 40,
+      run: () => window.shareButtonClick?.(true),
+    });
+    registerAction({
+      id: "copyLink",
+      label: "Copy link",
+      icon: "link",
+      placements: ["more"],
+      group: "Share",
+      priority: 30,
+      run: async () => {
+        try {
+          await navigator.clipboard.writeText(shortPageUrl());
+          toast("Link to this page copied.");
+        } catch {
+          toast("Couldn't copy the link.");
+        }
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Start-up
+  // ---------------------------------------------------------------------
+
+  function whenViewerReady(callback) {
+    const check = () => {
+      const a = app();
+      if (a?.eventBus && a.pdfDocument && a.pagesCount) {
+        callback(a);
+      } else {
+        setTimeout(check, 200);
+      }
+    };
+    check();
+  }
+
+  function waitForOutline(tries = 0) {
+    if (outline()) {
+      renderTicks();
+      updatePageUI();
+    } else if (tries < 60) {
+      setTimeout(() => waitForOutline(tries + 1), 1000);
+    }
+  }
+
+  function startReaderUi() {
+    registerBuiltInActions();
+    buildChrome();
+
+    whenViewerReady(a => {
+      a.eventBus._on("pagechanging", () => {
+        updatePageUI();
+        // The app updates its title after it hears about the page change.
+        setTimeout(updatePageUI, 400);
+      });
+      a.eventBus._on("pagesloaded", updatePageUI);
+
+      // A page without a text version (.md) in "Fit to phone" mode: offer
+      // the original page, once per switch into that mode.
+      let textNoticeShown = false;
+      a.eventBus._on("textviewunavailable", () => {
+        if (textNoticeShown || window.VIEW_MODE !== "text") {
+          return;
+        }
+        textNoticeShown = true;
+        toast("This page has no text version yet.", {
+          actionLabel: "Show original",
+          onAction: () => window.switchMode?.("pdf"),
+          timeout: 8000,
+        });
+      });
+      a.eventBus._on("pagerendered", () => {
+        if (window.VIEW_MODE !== "text") {
+          textNoticeShown = false;
+        }
+      });
+      updatePageUI();
+      waitForOutline();
+
+      const container = document.getElementById("viewerContainer");
+      wireScrollHiding(container);
+      wireGestures(container);
+
+      if (!storageGet("ruiHintShown")) {
+        storageSet("ruiHintShown", "1");
+        const touchDevice = matchMedia("(pointer: coarse)").matches;
+        toast(
+          touchDevice
+            ? "Tap the page to show or hide controls. Swipe to turn pages."
+            : "Click the page to show or hide controls. Use ← → to turn pages.",
+          { timeout: 6000 }
+        );
+      }
+    });
+
+    document.addEventListener("baws:speakingchange", refreshPressedStates);
+  }
+
+  window.BawsReaderUI = {
+    registerAction,
+    toast,
+    openSheet,
+    closeSheet,
+    showControls: () => setChromeHidden(false),
+    hideControls: () => setChromeHidden(true),
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startReaderUi);
+  } else {
+    startReaderUi();
+  }
+})();

@@ -995,7 +995,7 @@ function buildGeneric(defines, dir) {
       .src("web/page-flip-sound.mp3")
       .pipe(gulp.dest(dir + "web")),
       gulp
-      .src("web/viewer-flexi.js")
+      .src(["web/viewer-flexi.js", "web/reader-ui.js", "web/reader-ui.css"])
       .pipe(gulp.dest(dir + "web")),
   ]);
 }
@@ -1184,7 +1184,7 @@ function buildMinified(defines, dir) {
       .src("web/page-flip-sound.mp3")
       .pipe(gulp.dest(dir + "web")),
       gulp
-      .src("web/viewer-flexi.js")
+      .src(["web/viewer-flexi.js", "web/reader-ui.js", "web/reader-ui.css"])
       .pipe(gulp.dest(dir + "web")),
   ]);
 }

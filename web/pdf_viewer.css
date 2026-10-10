@@ -87,6 +87,18 @@
   border-radius: 5px;
 }
 
+/* Shown when a page has no text version (.md); see pdf_page_view.js. */
+.pdfViewer .textView.textViewUnavailable {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  box-sizing: border-box;
+  text-align: center;
+  font: 16px/1.5 system-ui, sans-serif;
+  color: #5e5a52;
+}
+
 
 .pdfViewer .page {
   direction: ltr;

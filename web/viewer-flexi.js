@@ -67,7 +67,15 @@ if ("speechSynthesis" in window) {
 
 let wakeLock = null;
 
-$(document).ready(function () {
+function onDomReady(callback) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", callback);
+  } else {
+    callback();
+  }
+}
+
+onDomReady(function () {
   voicePanel = document.getElementById("voicePanel");
 
   // Moved message listener here for better reliability
@@ -108,89 +116,6 @@ $(document).ready(function () {
       audioMeta.voices = voicesArray;
       updateVoiceSelector();
     }
-  });
-
-  $(".moreReadable").click(function (event) {
-    // moreReadable = !moreReadable;
-    // if (moreReadable) {
-    //   $(".canvasWrapper").attr("display", "none");
-    //   $(".markedContent").attr("color", "black");
-    //   $(".textLayer").attr("opacity", 1);
-    //   //$(".textLayer span").attr("color", "black");
-    // }
-    // var cols = document.getElementsByClassName('canvasWrapper');
-    // for(i = 0; i < cols.length; i++) {
-    //      cols[i].style.display = 'none';
-    //   }
-    //   var markedContent = document.getElementsByClassName('markedContent');
-    // for(i = 0; i < markedContent.length; i++) {
-    //   markedContent[i].style.color = 'black';
-    //   }
-    //   var textLayer = document.getElementsByClassName('textLayer');
-    // for(i = 0; i < textLayer.length; i++) {
-    //   //textLayer span, also need to make black
-    //   textLayer[i].style.opacity = 1;
-    //   }
-    // var textLayerSpan = document.getElementsByClassName('textLayer span');
-    // for(i = 0; i < textLayerSpan.length; i++) {
-    //   //textLayer span, also need to make black
-    //   textLayerSpan[i].style.color = 'black';
-    //   }
-  });
-
-  //actual id=viewerContainer, this is used to capture page left right bottom event
-  $("#temp").click(function (event) {
-    //console.log(event)
-
-    var win = window,
-      doc = document,
-      docElem = doc.documentElement,
-      body = doc.getElementsByTagName("body")[0],
-      x = win.innerWidth || docElem.clientWidth || body.clientWidth,
-      y = win.innerHeight || docElem.clientHeight || body.clientHeight;
-    //console.log(x + ' × ' + y);
-    var yBottom = y * 0.75,
-      xLeftBottom = x * 0.25,
-      xRightBottom = x * 0.75;
-    if (event.clientY >= yBottom) {
-      var textContent =
-        "clientX: " + event.clientX + " - clientY: " + event.clientY;
-      // console.log(textContent)
-      if (event.clientX <= xLeftBottom) {
-        PDFViewerApplication.pdfViewer.previousPage();
-      } else if (event.clientX >= xRightBottom) {
-        PDFViewerApplication.pdfViewer.nextPage();
-      }
-    }
-  });
-
-  $(window).resize(function () {
-    //resizePdf()
-  });
-
-  $("#viewerContainer").on("scroll", function (e) {
-    // if(PDFViewerApplication.pdfLinkService.pdfHistory._fingerprint){
-    //   if(!localStorage.getItem("pdfMeta")){
-    //     localStorage.setItem("pdfMeta",JSON.stringify({"defaultScrolling":{"horizantalScroll": e.currentTarget.scrollLeft, "verticalScroll":e.currentTarget.scrollTop}}))
-    //   }else{
-    //     if(!isDefaultScrolling(e.currentTarget.scrollTop,e.currentTarget.scrollLeft)){
-    //         localStorage.setItem("pdfMeta",JSON.stringify({"defaultScrolling":{"horizantalScroll": e.currentTarget.scrollLeft, "verticalScroll":e.currentTarget.scrollTop}}))
-    //     }
-    //   }
-    // }
-    // if(PDFViewerApplication.pdfLinkService.pdfHistory){
-    //     if(!isPageDiff())
-    //     var currentScrolling={"horizantalScroll": e.currentTarget.scrollLeft, "verticalScroll":e.currentTarget.scrollTop};
-    //     if(PDFViewerApplication){
-    //     let pdfMeta=localStorage.getItem("pdfMeta")
-    //     let mergeObj={currentScrolling}
-    //     if(pdfMeta){
-    //     pdfMeta= JSON.parse(pdfMeta)
-    //       mergeObj ={...mergeObj,...pdfMeta};
-    //     }
-    //      localStorage.setItem("pdfMeta",JSON.stringify(mergeObj))
-    //     }
-    // }
   });
 
   let scondsCount = 0;
@@ -267,26 +192,11 @@ $(document).ready(function () {
     }
   }
 
-  $("#selectVoices").change(function (event) {
-    console.log(this.value);
-    //if (synth.speaking) {
-    //synth.pause();
-    storeSelectedAudio(this.value);
-    //  setTimeout(synth.resume(), 1000);
-    //}
-
-    // stopReading()
-    //prevParagraph()
-
-    /*let textArr=document.querySelectorAll("[role='presentation']");
-    if(textArr && textArr.length > 0){
-      
-          stopReading();
-          audioMeta.isSpeaking=true;
-          startNodeReading(textArr,audioMeta.currentPara)
-        
-    }*/
-  });
+  document
+    .getElementById("selectVoices")
+    ?.addEventListener("change", function () {
+      storeSelectedAudio(this.value);
+    });
 
   startWatching();
 });
@@ -487,7 +397,6 @@ function shareOnWhatsup() {
   }
 }
 function getCurrenPageUrl() {
-  $("#textShareModal").modal("hide");
   return encodeURIComponent(
     window.location.origin +
       "/web/viewer.html?file=" +
@@ -512,7 +421,6 @@ function clearTextSelection() {
 }
 function copyText() {
   if (selectedText) {
-    $("#textShareModal").modal("hide");
     navigator.clipboard.writeText(selectedText);
   }
 }
@@ -654,8 +562,10 @@ function cleanTextForSpeech(str) {
 }
 
 function updateVoiceSelector() {
-  const selectVoices = $("#selectVoices");
-  selectVoices.empty(); // Clear the dropdown
+  const selectVoices = document.getElementById("selectVoices");
+  if (selectVoices) {
+    selectVoices.replaceChildren(); // Clear the dropdown
+  }
 
   if (!audioMeta.voices || audioMeta.voices.length === 0) return;
 
@@ -676,7 +586,7 @@ function updateVoiceSelector() {
   let lang_stored = null;
 
   const seenNames = new Set();
-  $.each(audioMeta.voices, function (index, voice) {
+  Array.from(audioMeta.voices).forEach(function (voice, index) {
     if (!voice || !voice.name || seenNames.has(voice.name)) return;
     seenNames.add(voice.name);
 
@@ -691,7 +601,12 @@ function updateVoiceSelector() {
     ) {
       lang_set_backup = index;
     }
-    selectVoices.append($("<option></option>").val(index).html(voice.name));
+    if (selectVoices) {
+      const option = document.createElement("option");
+      option.value = index;
+      option.textContent = voice.name;
+      selectVoices.append(option);
+    }
   });
 
   const voiceToSelect =
@@ -701,7 +616,9 @@ function updateVoiceSelector() {
         ? lang_set
         : lang_set_backup;
   if (voiceToSelect !== null && audioMeta.voices[voiceToSelect]) {
-    selectVoices.val(voiceToSelect);
+    if (selectVoices) {
+      selectVoices.value = voiceToSelect;
+    }
     setMsgVoice(audioMeta.voices[voiceToSelect]);
   }
 }
@@ -1134,17 +1051,23 @@ function getPdfMeta() {
   }
 }
 function setPlayIcon() {
-  $("#audioPlayIcon").removeClass();
-  if (audioMeta.isSpeaking) {
-    $("#audioPlayIcon").addClass("far fa-stop fa-3x");
-  } else {
-    $("#audioPlayIcon").addClass("far fa-play fa-3x");
+  const playIcon = document.getElementById("audioPlayIcon");
+  if (playIcon) {
+    playIcon.className = audioMeta.isSpeaking
+      ? "far fa-stop fa-3x"
+      : "far fa-play fa-3x";
   }
   if ("mediaSession" in navigator && navigator.mediaSession.metadata) {
     navigator.mediaSession.playbackState = audioMeta.isSpeaking
       ? "playing"
       : "paused";
   }
+  // Lets the new reader UI (reader-ui.js) reflect the reading state.
+  document.dispatchEvent(
+    new CustomEvent("baws:speakingchange", {
+      detail: { speaking: audioMeta.isSpeaking },
+    })
+  );
 }
 // --- Function to HIDE the panel ---
 function hideVoicePanel() {
@@ -1569,7 +1492,10 @@ async function shareBookPageContent(
 document.addEventListener("DOMContentLoaded", event => {
   const shareButton = document.getElementById("shareButton");
 
-  if (isShareButtonHooked) return;
+  // The new reader UI (reader-ui.js) wires its own share button.
+  if (isShareButtonHooked || !shareButton || window.BAWS_READER_UI === 2) {
+    return;
+  }
   let pressTimer;
   let isLongPress = false;
   let isPressing = false;
