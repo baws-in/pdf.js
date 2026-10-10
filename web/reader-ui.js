@@ -72,6 +72,7 @@
     nextPage: '<path d="m13 17 5-5-5-5M6 17l5-5-5-5"/>',
     expand: '<path d="m18 15-6-6-6 6"/>',
     chevronRight: '<path d="m9 18 6-6-6-6"/>',
+    caretDown: '<path d="m6 9 6 6 6-6"/>',
     note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     notebook:
       '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
@@ -262,10 +263,23 @@
 
     ui.top = el("header", "rui-top");
     ui.topStart = el("div", "", { style: "display:flex" });
-    ui.title = el("div", "rui-title");
+    // The title opens "Go to start" (start of this chapter, part or book).
+    // Long titles are cut short with "…" in the bar; the sheet shows them
+    // in full.
+    ui.title = el("button", "rui-title", {
+      type: "button",
+      "aria-haspopup": "dialog",
+    });
     ui.titleSub = el("span", "rui-title-sub");
+    const mainRow = el("span", "rui-title-row");
     ui.titleMain = el("span", "rui-title-main");
-    ui.title.append(ui.titleSub, ui.titleMain);
+    const caret = el("span", "rui-title-caret", { "aria-hidden": "true" });
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    caret.innerHTML = icon("caretDown");
+    mainRow.append(ui.titleMain, caret);
+    ui.title.append(ui.titleSub, mainRow);
+    wireButton(ui.title, { run: openJumpSheet, longPress: openJumpSheet });
     ui.topEnd = el("div", "", { style: "display:flex" });
     ui.top.append(ui.topStart, ui.title, ui.topEnd);
 
@@ -720,11 +734,71 @@
     const book = bookLabel();
     if (section) {
       ui.titleSub.textContent = book;
-      ui.titleMain.textContent = section.title.replaceAll(/\s+/g, " ").trim();
+      ui.titleMain.textContent = cleanTitle(section.title);
     } else {
       ui.titleSub.textContent = `Page ${page}`;
       ui.titleMain.textContent = book;
     }
+    // Full titles on hover (desktop) and for screen readers.
+    const full = `${ui.titleMain.textContent} — ${ui.titleSub.textContent}`;
+    ui.title.title = full;
+    ui.title.setAttribute(
+      "aria-label",
+      `${full}. Go to the start of the chapter or book`
+    );
+  }
+
+  function cleanTitle(title) {
+    return String(title || "")
+      .replaceAll(/\s+/g, " ")
+      .trim();
+  }
+
+  /** "Go to start": the current chapter and each level above it. */
+  function openJumpSheet() {
+    const page = currentPage();
+    const path = outlinePath(page).reverse(); // deepest (chapter) first
+    openSheet("Go to start", body => {
+      const list = el("div", "rui-jump");
+      const addRow = (label, title, dest) => {
+        const row = el("button", "rui-jump-row", { type: "button" });
+        const text = el("span", "rui-jump-text");
+        const kind = el("span", "rui-jump-kind");
+        kind.textContent = label;
+        const name = el("span", "rui-jump-title");
+        name.textContent = title;
+        text.append(kind, name);
+        const where = el("span", "rui-jump-page");
+        where.textContent = dest === page ? "You're here" : `Page ${dest}`;
+        row.append(text, where);
+        row.addEventListener("click", () => {
+          goToPage(dest);
+          closeSheet();
+        });
+        list.append(row);
+      };
+      path.forEach((node, i) => {
+        let label = "Start of this part";
+        if (i === path.length - 1) {
+          label = "Start of this book"; // outermost level
+        } else if (i === 0) {
+          label = "Start of this chapter"; // innermost level
+        }
+        addRow(label, cleanTitle(node.title), node.dest);
+      });
+      if (path.length === 0 || path.at(-1).dest !== 1) {
+        addRow("Start of the volume", bookLabel() || "Page 1", 1);
+      }
+      if (outline()) {
+        const contents = el("button", "rui-chip rui-jump-contents", {
+          type: "button",
+        });
+        contents.textContent = "All contents";
+        contents.addEventListener("click", () => openNotebook("contents"));
+        list.append(contents);
+      }
+      body.append(list);
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -2843,6 +2917,21 @@
       priority: 110,
       run: () =>
         openNotebook(notebook.tab === "contents" ? "highlights" : notebook.tab),
+    });
+    registerAction({
+      id: "askPradnya",
+      label: "Ask Pradnya",
+      icon: "note",
+      placements: ["more"],
+      group: "Ask",
+      priority: 5,
+      // Only inside the BAWS.in app, which hosts the Pradnya chat.
+      visible: () => window.parent !== window,
+      run: () =>
+        window.parent.postMessage(
+          JSON.stringify({ action: "openPradnya" }),
+          "*"
+        ),
     });
     registerAction({
       id: "goToPage",

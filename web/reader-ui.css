@@ -257,8 +257,83 @@ html.rui .findbar {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   line-height: 1.25;
-  padding-inline: 4px;
+  padding: 4px 6px !important;
+  border-radius: 10px;
+  text-align: start;
+}
+
+.rui-title:hover {
+  background: var(--rui-hover) !important;
+}
+
+.rui-title-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rui-title-caret {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--rui-muted);
+}
+
+.rui-title-caret .rui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* "Go to start" sheet */
+.rui-jump {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rui-jump-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px !important;
+  border-radius: 14px;
+  background: var(--rui-tile) !important;
+  text-align: start;
+}
+
+.rui-jump-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rui-jump-kind {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rui-muted);
+}
+
+.rui-jump-title {
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rui-jump-page {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--rui-muted);
+}
+
+.rui-jump-contents {
+  align-self: flex-start;
+  margin-top: 4px;
 }
 
 .rui-title-sub {
@@ -1372,6 +1447,9 @@ html.rui-chrome-hidden .rui-mini {
 }
 
 .rui-filter {
+  /* .rui-input stretches along a row (flex: 1); in this column it must not
+     grow, or a book with a short contents list gets a very tall box. */
+  flex: none;
   height: 40px;
   font-size: 15px;
 }
