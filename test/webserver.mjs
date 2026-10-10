@@ -48,6 +48,8 @@ function WebServer() {
   this.disableRangeRequests = false;
   this.hooks = {
     GET: [crossOriginHandler],
+    // HEAD is answered like GET; Node omits the body for HEAD responses.
+    HEAD: [crossOriginHandler],
     POST: [],
   };
 }
@@ -141,6 +143,8 @@ WebServer.prototype = {
     }
 
     var fileSize;
+    var fileETag;
+    var fileLastModified;
 
     function statFile(err, stats) {
       if (err) {
@@ -150,6 +154,14 @@ WebServer.prototype = {
       }
 
       fileSize = stats.size;
+      // Lets the viewer's chunk cache tell file versions apart.
+      fileETag =
+        '"' +
+        stats.size.toString(16) +
+        "-" +
+        Math.floor(stats.mtimeMs).toString(16) +
+        '"';
+      fileLastModified = stats.mtime.toUTCString();
       var isDir = stats.isDirectory();
       if (isDir && !/\/$/.test(pathPart)) {
         res.setHeader("Location", pathPart + "/" + urlParts[2]);
@@ -181,7 +193,7 @@ WebServer.prototype = {
         serveRequestedFileRange(
           filePath,
           start,
-          isNaN(end) ? fileSize : end + 1
+          isNaN(end) ? fileSize : Math.min(end + 1, fileSize)
         );
         return;
       }
@@ -298,6 +310,8 @@ WebServer.prototype = {
       }
       res.setHeader("Content-Type", contentType);
       res.setHeader("Content-Length", fileSize);
+      res.setHeader("ETag", fileETag);
+      res.setHeader("Last-Modified", fileLastModified);
       if (cacheExpirationTime > 0) {
         var expireTime = new Date();
         expireTime.setSeconds(expireTime.getSeconds() + cacheExpirationTime);
@@ -326,6 +340,8 @@ WebServer.prototype = {
       res.setHeader("Accept-Ranges", "bytes");
       res.setHeader("Content-Type", contentType);
       res.setHeader("Content-Length", end - start);
+      res.setHeader("ETag", fileETag);
+      res.setHeader("Last-Modified", fileLastModified);
       res.setHeader(
         "Content-Range",
         "bytes " + start + "-" + (end - 1) + "/" + fileSize

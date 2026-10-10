@@ -37,10 +37,14 @@ function validateRangeRequestCapabilities({
     allowRangeRequests: false,
     suggestedLength: undefined,
   };
-  
+
+  // For a range response the total size is after the "/" in Content-Range;
+  // for a full response (no range support or no Range sent) use
+  // Content-Length.
   const contentRange = getResponseHeader("Content-Range");
-  const length = parseInt(contentRange.substring(contentRange.indexOf('/') + 1)); 
-  //const length = parseInt(getResponseHeader("Content-Length"), 10);
+  const length = contentRange
+    ? parseInt(contentRange.substring(contentRange.indexOf("/") + 1), 10)
+    : parseInt(getResponseHeader("Content-Length"), 10);
   if (!Number.isInteger(length)) {
     return returnValues;
   }
