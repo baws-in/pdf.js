@@ -563,6 +563,186 @@ html.rui-chrome-hidden .rui-bottom {
   cursor: pointer;
 }
 
+/* ---------- Selection bar ---------- */
+
+.rui-selbar {
+  position: fixed;
+  z-index: 1065;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 16px;
+  background: var(--rui-toast-bg);
+  color: var(--rui-toast-fg);
+  box-shadow: var(--rui-shadow);
+  font-family: var(--rui-font);
+  font-size: 11px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.rui-selbar[hidden] {
+  display: none;
+}
+
+.rui-selbar button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.rui-selbar button:focus-visible {
+  outline: 2px solid var(--rui-accent);
+  outline-offset: 2px;
+}
+
+.rui-swatches {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 6px;
+}
+
+.rui-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50% !important;
+}
+
+.rui-swatch[aria-current="true"] {
+  box-shadow:
+    0 0 0 2px var(--rui-toast-bg),
+    0 0 0 4px var(--rui-toast-fg);
+}
+
+.rui-swatch-yellow {
+  background: #f6ce4a !important;
+}
+
+.rui-swatch-blue {
+  background: #7fa7ea !important;
+}
+
+.rui-swatch-green {
+  background: #86c489 !important;
+}
+
+.rui-swatch-pink {
+  background: #ee97b9 !important;
+}
+
+.rui-selbar-sep {
+  width: 1px;
+  height: 28px;
+  margin: 0 2px;
+  background: currentColor;
+  opacity: 0.2;
+}
+
+.rui-selbar-btn {
+  min-width: 48px;
+  height: 44px;
+  padding: 0 6px !important;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.rui-selbar-btn .rui-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.rui-selbar-btn:hover {
+  background: rgba(127, 127, 127, 0.2) !important;
+}
+
+/* ---------- Definition card ---------- */
+
+.rui-defcard {
+  position: fixed;
+  inset: auto 10px calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 1070;
+  max-width: 520px;
+  margin-inline: auto;
+  padding: 14px 12px 16px 20px;
+  box-sizing: border-box;
+  border-radius: 22px;
+  background: var(--rui-surface-solid);
+  border: 1px solid var(--rui-line);
+  box-shadow: var(--rui-shadow);
+  font-family: var(--rui-font);
+  color: var(--rui-ink);
+}
+
+.rui-defcard button,
+.rui-defcard a {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.rui-defcard-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rui-defword {
+  flex: 1;
+  min-width: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rui-defbody {
+  margin: 6px 8px 14px 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.rui-muted {
+  color: var(--rui-muted);
+}
+
+.rui-defactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rui-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 14px !important;
+  border-radius: 20px;
+  border: 1px solid var(--rui-line) !important;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--rui-ink) !important;
+}
+
+.rui-chip:hover {
+  background: var(--rui-hover) !important;
+}
+
 /* ---------- Larger screens ---------- */
 
 @media (min-width: 900px) {

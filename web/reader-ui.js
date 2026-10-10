@@ -56,6 +56,11 @@
     link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     image:
       '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+    define:
+      '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+    speak:
+      '<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>',
   };
 
   function icon(name) {
@@ -709,6 +714,7 @@
    */
   function openSheet(title, build) {
     closeSheet(true);
+    hideSelectionBar();
     const returnFocus = document.activeElement;
     const scrim = el("div", "rui-scrim");
     const sheet = el("div", "rui-sheet", {
@@ -872,6 +878,321 @@
   }
 
   // ---------------------------------------------------------------------
+  // Selection bar
+  // ---------------------------------------------------------------------
+
+  const HIGHLIGHT_COLORS = [
+    { name: "yellow", label: "Yellow" },
+    { name: "blue", label: "Blue" },
+    { name: "green", label: "Green" },
+    { name: "pink", label: "Pink" },
+  ];
+
+  // The last selection made in the book. Tapping a button can collapse the
+  // selection on some devices before the button's click runs, so actions
+  // restore this range first.
+  let lastRange = null;
+  let lastRangeCollapsedAt = 0;
+
+  function selectionRangeInBook() {
+    if (!hasSelection()) {
+      return null;
+    }
+    const range = window.getSelection().getRangeAt(0);
+    const node = range.commonAncestorContainer;
+    const element =
+      node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return element?.closest("#viewer") ? range : null;
+  }
+
+  /** Puts back the last book selection if a tap has just cleared it. */
+  function restoreSelection() {
+    if (hasSelection()) {
+      return true;
+    }
+    if (lastRange && performance.now() - lastRangeCollapsedAt < 1500) {
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(lastRange);
+      return hasSelection();
+    }
+    return false;
+  }
+
+  function selectedText() {
+    return window.getSelection().toString().replaceAll(/\s+/g, " ").trim();
+  }
+
+  function lastHighlightColor() {
+    const stored = storageGet("ruiHighlightColor");
+    return HIGHLIGHT_COLORS.some(c => c.name === stored) ? stored : "yellow";
+  }
+
+  function highlightSelection(color) {
+    if (!restoreSelection()) {
+      toast("Select some text first, then tap Highlight.");
+      return;
+    }
+    storageSet("ruiHighlightColor", color);
+    window.addBookMark?.(color);
+    hideSelectionBar();
+  }
+
+  function buildSelectionBar() {
+    ui.selbar = el("div", "rui-selbar", {
+      role: "toolbar",
+      "aria-label": "Selected text",
+      hidden: "",
+    });
+    // Keep the selection when pressing the bar's buttons (mouse).
+    ui.selbar.addEventListener("mousedown", event => event.preventDefault());
+    const host = document.getElementById("outerContainer") || document.body;
+    host.append(ui.selbar);
+  }
+
+  function renderSelectionBar() {
+    const swatches = el("div", "rui-swatches");
+    const current = lastHighlightColor();
+    for (const color of HIGHLIGHT_COLORS) {
+      const swatch = el("button", `rui-swatch rui-swatch-${color.name}`, {
+        type: "button",
+        "aria-label": `Highlight ${color.label.toLowerCase()}`,
+        title: `Highlight ${color.label.toLowerCase()}`,
+      });
+      if (color.name === current) {
+        swatch.setAttribute("aria-current", "true");
+      }
+      swatch.addEventListener("click", () => highlightSelection(color.name));
+      swatches.append(swatch);
+    }
+    const separator = el("span", "rui-selbar-sep", { "aria-hidden": "true" });
+    const buttons = actionsFor("selection").map(action => {
+      const button = el("button", "rui-selbar-btn", { type: "button" });
+      // Static markup (icons and fixed labels only).
+      // eslint-disable-next-line no-unsanitized/property
+      button.innerHTML = icon(action.icon) + "<span></span>";
+      button.querySelector("span").textContent = labelOf(action);
+      button.addEventListener("click", event => {
+        restoreSelection();
+        action.run?.(event, button);
+      });
+      return button;
+    });
+    ui.selbar.replaceChildren(swatches, separator, ...buttons);
+  }
+
+  function positionSelectionBar(range) {
+    const bar = ui.selbar;
+    const rects = [...range.getClientRects()].filter(r => r.width > 0);
+    if (!rects.length) {
+      return;
+    }
+    const first = rects[0];
+    const last = rects.at(-1);
+    const box = range.getBoundingClientRect();
+    const width = bar.offsetWidth;
+    const height = bar.offsetHeight;
+    const gap = 12;
+    const margin = 8;
+    // Phones show their own copy/share menu above a selection, so put ours
+    // below it on touch screens and above it with a mouse.
+    const touchFirst = matchMedia("(pointer: coarse)").matches;
+    const below = last.bottom + gap;
+    const above = first.top - height - gap;
+    const fitsBelow = below + height <= window.innerHeight - margin;
+    const fitsAbove = above >= margin;
+    const order = touchFirst
+      ? [fitsBelow && below, fitsAbove && above]
+      : [fitsAbove && above, fitsBelow && below];
+    const top = order.find(value => value !== false) ?? margin;
+    const left = Math.min(
+      Math.max(box.left + box.width / 2 - width / 2, margin),
+      window.innerWidth - width - margin
+    );
+    bar.style.top = `${Math.round(top)}px`;
+    bar.style.left = `${Math.round(left)}px`;
+  }
+
+  function showSelectionBar(range) {
+    if (ui.selbar.hidden) {
+      renderSelectionBar();
+      ui.selbar.hidden = false;
+    }
+    positionSelectionBar(range);
+  }
+
+  function hideSelectionBar() {
+    if (ui.selbar && !ui.selbar.hidden) {
+      ui.selbar.hidden = true;
+    }
+  }
+
+  function wireSelectionBar(container) {
+    buildSelectionBar();
+    let timer = null;
+    document.addEventListener("selectionchange", () => {
+      const range = selectionRangeInBook();
+      if (range) {
+        lastRange = range.cloneRange();
+      } else if (lastRange && !hasSelection()) {
+        lastRangeCollapsedAt = performance.now();
+      }
+      clearTimeout(timer);
+      // Wait for the selection to settle (handles being dragged).
+      timer = setTimeout(() => {
+        const settled = selectionRangeInBook();
+        if (settled && !sheetOpen) {
+          showSelectionBar(settled);
+        } else {
+          hideSelectionBar();
+        }
+      }, 200);
+    });
+    container.addEventListener(
+      "scroll",
+      () => {
+        const range = !ui.selbar.hidden && selectionRangeInBook();
+        if (range) {
+          positionSelectionBar(range);
+        }
+      },
+      { passive: true }
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Definition card
+  // ---------------------------------------------------------------------
+
+  function cleanWord(text) {
+    return text.replaceAll(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  }
+
+  function lookUp(word) {
+    try {
+      return window.parent.dictionary?.(word);
+    } catch {
+      return undefined; // dictionary not available (e.g. cross-origin)
+    }
+  }
+
+  function pronounce(word) {
+    if (window.audioMeta?.isSpeaking) {
+      return; // don't interrupt the audio reader
+    }
+    if (window.parent !== window && window.parent.isNativeApp) {
+      window.parent.postMessage(
+        JSON.stringify({
+          action: "speakTextNative",
+          data: { text: word, rate: 0.9, lang: window.msg?.lang || "en-US" },
+        }),
+        "*"
+      );
+    } else if (window.speechSynthesis) {
+      const utterance = new SpeechSynthesisUtterance(word);
+      if (window.msg?.voice) {
+        utterance.voice = window.msg.voice;
+      }
+      utterance.lang = window.msg?.lang || "en-US";
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+    }
+  }
+
+  function findInBook(word) {
+    const findBar = app()?.findBar;
+    if (!findBar) {
+      return;
+    }
+    findBar.open();
+    findBar.findField.value = word;
+    findBar.dispatchEvent("");
+  }
+
+  function closeDefinition() {
+    ui.defcard?.remove();
+    ui.defcard = null;
+  }
+
+  /**
+   * Shows the definition card for a word. `definition` is plain text from
+   * the app's dictionary, or empty when the word isn't in it.
+   */
+  function showDefinition(word, definition) {
+    closeDefinition();
+    const card = el("section", "rui-defcard", { "aria-label": "Definition" });
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    card.innerHTML =
+      '<div class="rui-defcard-head">' +
+      '<span class="rui-defword"></span>' +
+      '<button type="button" class="rui-icon-btn" data-rui="speak" aria-label="Pronounce" title="Pronounce">' +
+      icon("speak") +
+      "</button>" +
+      '<button type="button" class="rui-icon-btn" data-rui="close" aria-label="Close" title="Close">' +
+      icon("close") +
+      "</button>" +
+      "</div>" +
+      '<p class="rui-defbody"></p>' +
+      '<div class="rui-defactions">' +
+      '<button type="button" class="rui-chip" data-rui="find">Find in book</button>' +
+      '<a class="rui-chip" data-rui="web" target="_blank" rel="noopener">Search web</a>' +
+      "</div>";
+    card.querySelector(".rui-defword").textContent = word;
+    const body = card.querySelector(".rui-defbody");
+    if (definition) {
+      body.textContent = String(definition);
+    } else {
+      body.textContent = "This word isn't in our dictionary yet.";
+      body.classList.add("rui-muted");
+    }
+    card.querySelector('[data-rui="web"]').href =
+      "https://www.google.com/search?q=" + encodeURIComponent(`define ${word}`);
+    card
+      .querySelector('[data-rui="speak"]')
+      .addEventListener("click", () => pronounce(word));
+    card
+      .querySelector('[data-rui="close"]')
+      .addEventListener("click", closeDefinition);
+    card.querySelector('[data-rui="find"]').addEventListener("click", () => {
+      closeDefinition();
+      findInBook(word);
+    });
+    card.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        closeDefinition();
+      }
+    });
+    const host = document.getElementById("outerContainer") || document.body;
+    host.append(card);
+    ui.defcard = card;
+  }
+
+  function defineSelection() {
+    const word = cleanWord(selectedText());
+    if (!word || /\s/.test(word)) {
+      toast("Select a single word to see its meaning.");
+      return;
+    }
+    hideSelectionBar();
+    showDefinition(word, lookUp(word));
+  }
+
+  async function copySelection() {
+    const text = selectedText();
+    if (!text) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Copied.");
+    } catch {
+      toast("Couldn't copy the text.");
+    }
+    hideSelectionBar();
+  }
+
+  // ---------------------------------------------------------------------
   // Built-in actions
   // ---------------------------------------------------------------------
 
@@ -932,13 +1253,7 @@
       placements: ["dock"],
       priority: 30,
       elementId: "bookMark",
-      run: () => {
-        if (!hasSelection()) {
-          toast("Select some text first, then tap Highlight.");
-          return;
-        }
-        window.addBookMark?.();
-      },
+      run: () => highlightSelection(lastHighlightColor()),
     });
     registerAction({
       id: "share",
@@ -950,6 +1265,35 @@
       run: () => window.shareButtonClick?.(false),
       longPress: () => window.shareButtonClick?.(true),
     });
+    // Selection bar (after the colour swatches)
+    registerAction({
+      id: "define",
+      label: "Define",
+      icon: "define",
+      placements: ["selection"],
+      priority: 30,
+      run: defineSelection,
+    });
+    registerAction({
+      id: "shareSelection",
+      label: "Share",
+      icon: "share",
+      placements: ["selection"],
+      priority: 20,
+      run: () => {
+        hideSelectionBar();
+        window.shareButtonClick?.(false);
+      },
+    });
+    registerAction({
+      id: "copy",
+      label: "Copy",
+      icon: "copy",
+      placements: ["selection"],
+      priority: 10,
+      run: copySelection,
+    });
+
     registerAction({
       id: "more",
       label: "More",
@@ -1115,6 +1459,11 @@
       const container = document.getElementById("viewerContainer");
       wireScrollHiding(container);
       wireGestures(container);
+      wireSelectionBar(container);
+      a.eventBus._on("pagechanging", () => {
+        hideSelectionBar();
+        closeDefinition();
+      });
 
       if (!storageGet("ruiHintShown")) {
         storageSet("ruiHintShown", "1");
@@ -1134,6 +1483,7 @@
   window.BawsReaderUI = {
     registerAction,
     toast,
+    showDefinition,
     openSheet,
     closeSheet,
     showControls: () => setChromeHidden(false),

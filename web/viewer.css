@@ -1574,7 +1574,19 @@
     position: absolute;
     background-color: rgba(255, 255, 0, 0.25);
     border-radius: 2px;
-    pointer-events: none; 
+    pointer-events: none;
+}
+
+/* Optional highlight colours (the bookmark's `color` field). Yellow stays
+   the default above, so older bookmarks without a colour look the same. */
+.highlight-layer.highlight-blue {
+    background-color: rgba(96, 150, 235, 0.3);
+}
+.highlight-layer.highlight-green {
+    background-color: rgba(100, 190, 105, 0.3);
+}
+.highlight-layer.highlight-pink {
+    background-color: rgba(236, 120, 170, 0.3);
 }
 
 /* Delete button for highlights */

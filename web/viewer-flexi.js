@@ -1169,6 +1169,11 @@ function showDictionary(result, searchText) {
     let check_one_word = selectedText.replace(/^[^a-z\d]*|[^a-z\d]*$/gi, "");
     if (check_one_word.indexOf(" ") > 0) return;
   }
+  // The new reader UI shows its own definition card (no Bootstrap).
+  if (window.BAWS_READER_UI === 2 && window.BawsReaderUI) {
+    window.BawsReaderUI.showDefinition(searchText, result);
+    return;
+  }
   let panelBody = document.getElementById("dictionaryPanelBody");
   panelBody.innerHTML = "";
   if (result) {
@@ -1197,6 +1202,11 @@ function hideDictionaryPanel() {
 }
 
 function genericShowPanel(result, timeout) {
+  // The new reader UI shows notices as toasts (no Bootstrap).
+  if (window.BAWS_READER_UI === 2 && window.BawsReaderUI) {
+    window.BawsReaderUI.toast(String(result || ""), { timeout });
+    return;
+  }
   let panelBody = document.getElementById("genericPanelBody");
   panelBody.innerHTML = "";
   if (result) {
@@ -1616,7 +1626,17 @@ async function shareButtonClick(isLongPressShare) {
   }
 }
 
-async function saveSelection() {
+// Highlight colours are stored by name in the optional `color` field;
+// highlights without one (all older bookmarks) are yellow.
+const HIGHLIGHT_COLORS = ["yellow", "blue", "green", "pink"];
+
+function highlightColorOf(highlight) {
+  return HIGHLIGHT_COLORS.includes(highlight?.color)
+    ? highlight.color
+    : "yellow";
+}
+
+async function saveSelection(color) {
   const pdfDoc = PDFViewerApplication.pdfDocument;
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
@@ -1753,6 +1773,9 @@ async function saveSelection() {
     baseUrl: PDFViewerApplication.baseUrl,
     shared: false,
   };
+  if (HIGHLIGHT_COLORS.includes(color)) {
+    newHighlight.color = color;
+  }
   window.parent.postMessage(
     { type: "saveHighlight", payload: newHighlight },
     "*"
@@ -1835,7 +1858,7 @@ async function drawHighlightsOnPage(pageNum) {
     // 2. Create and position the visual highlight layers.
     highlight.rects.forEach(rect => {
       const el = document.createElement("div");
-      el.className = "highlight-layer";
+      el.className = `highlight-layer highlight-${highlightColorOf(highlight)}`;
 
       // Position absolutely within the page container
       el.style.top = `${(rect.topPercent / 100) * pageRect.height}px`;
@@ -1952,10 +1975,10 @@ async function disableBookMarkButtonFor10Seconds() {
   }, 10000);
 }
 
-async function addBookMark() {
+async function addBookMark(color) {
   // first disable the bookmark button
   disableBookMarkButtonFor10Seconds();
-  saveSelection();
+  saveSelection(color);
   if (window.getSelection) {
     window.getSelection().removeAllRanges();
   } else if (document.selection) {
