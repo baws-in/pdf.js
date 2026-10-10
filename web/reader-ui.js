@@ -71,6 +71,13 @@
     prevPage: '<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>',
     nextPage: '<path d="m13 17 5-5-5-5M6 17l5-5-5-5"/>',
     expand: '<path d="m18 15-6-6-6 6"/>',
+    chevronRight: '<path d="m9 18 6-6-6-6"/>',
+    note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    notebook:
+      '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    trash:
+      '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/>',
+    bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
   };
 
   function icon(name) {
@@ -273,6 +280,7 @@
       '<div class="rui-scrub-mid">' +
       '<div class="rui-scrub-track">' +
       '<div class="rui-scrub-ticks"></div>' +
+      '<div class="rui-scrub-marks" aria-hidden="true"></div>' +
       '<input type="range" class="rui-scrub-range" min="1" max="1" value="1" step="1" aria-label="Page">' +
       '<div class="rui-scrub-bubble" hidden></div>' +
       "</div>" +
@@ -285,6 +293,7 @@
       '<nav class="rui-dock" aria-label="Reader tools"></nav>';
     ui.range = ui.bottom.querySelector(".rui-scrub-range");
     ui.ticks = ui.bottom.querySelector(".rui-scrub-ticks");
+    ui.marks = ui.bottom.querySelector(".rui-scrub-marks");
     ui.bubble = ui.bottom.querySelector(".rui-scrub-bubble");
     ui.pageLabel = ui.bottom.querySelector('[data-rui="page"]');
     ui.pageHint = ui.bottom.querySelector('[data-rui="hint"]');
@@ -818,7 +827,12 @@
         for (const action of list) {
           const tile = makeTile(action);
           tile.addEventListener("click", () => {
-            if (!action.keepSheetOpen) {
+            // Close More after the action, unless the action has already
+            // opened a sheet of its own (Notebook, Go to page...).
+            if (
+              !action.keepSheetOpen &&
+              sheetOpen?.sheet === body.parentElement
+            ) {
               closeSheet();
             }
           });
@@ -1156,6 +1170,7 @@
       "</div>" +
       '<p class="rui-defbody"></p>' +
       '<div class="rui-defactions">' +
+      '<button type="button" class="rui-chip" data-rui="save"></button>' +
       '<button type="button" class="rui-chip" data-rui="find">Find in book</button>' +
       '<a class="rui-chip" data-rui="web" target="_blank" rel="noopener">Search web</a>' +
       "</div>";
@@ -1172,6 +1187,15 @@
     card
       .querySelector('[data-rui="speak"]')
       .addEventListener("click", () => pronounce(word));
+    const save = card.querySelector('[data-rui="save"]');
+    const showSaved = saved => {
+      save.textContent = saved ? "Saved ✓" : "Save word";
+      save.setAttribute("aria-pressed", String(saved));
+    };
+    showSaved(isWordSaved(word));
+    save.addEventListener("click", () =>
+      showSaved(toggleSavedWord(word, definition))
+    );
     card
       .querySelector('[data-rui="close"]')
       .addEventListener("click", closeDefinition);
@@ -1863,6 +1887,841 @@
   }
 
   // ---------------------------------------------------------------------
+  // Notebook: Contents, Highlights, Notes (BAWS.in Team), Words
+  // ---------------------------------------------------------------------
+
+  const NOTE_KINDS = {
+    note: "Note",
+    context: "Context",
+    correction: "Correction",
+    disputed: "Disputed",
+  };
+  const HIGHLIGHT_LABELS = {
+    yellow: "Yellow",
+    blue: "Blue",
+    green: "Green",
+    pink: "Pink",
+  };
+
+  const notebook = {
+    tab: "contents",
+    notes: [], // BAWS.in Team notes for this book (loadAnnotations)
+    noteScope: "page",
+    highlightColor: "all",
+    contentsFilter: "",
+    toastedPages: new Set(),
+  };
+
+  /** "/books/<parent>/<language>/<book>/pdf/" for the open book, or null. */
+  function bookPath() {
+    const data = window.getBookUrlData?.();
+    return data
+      ? `/books/${data.bookParent}/${data.language}/${data.bookName}/pdf/`
+      : null;
+  }
+
+  function inThisBook(item) {
+    const path = bookPath();
+    return !!path && typeof item?.url === "string" && item.url.includes(path);
+  }
+
+  function bookHighlights() {
+    // `storedHighlights` is a top-level `let` in viewer-flexi.js.
+    // eslint-disable-next-line no-undef
+    const all = typeof storedHighlights !== "undefined" ? storedHighlights : [];
+    return all
+      .filter(inThisBook)
+      .sort(
+        (a, b) =>
+          a.pageNo - b.pageNo ||
+          (a.rects?.[0]?.topPercent ?? 0) - (b.rects?.[0]?.topPercent ?? 0)
+      );
+  }
+
+  function highlightColor(highlight) {
+    return HIGHLIGHT_COLORS.some(c => c.name === highlight.color)
+      ? highlight.color
+      : "yellow";
+  }
+
+  function notesOnPage(page) {
+    return notebook.notes.filter(note => note.pageNo === page);
+  }
+
+  /** Plain text with paragraphs; http(s) links become links, nothing else. */
+  function renderPlainText(container, text) {
+    const paragraphs = String(text || "").split(/\n{2,}/);
+    for (const paragraph of paragraphs) {
+      const p = el("p");
+      const parts = paragraph.split(/(https?:\/\/[^\s<>"']+)/g);
+      parts.forEach((part, i) => {
+        if (i % 2 === 1) {
+          const link = el("a", "", {
+            href: part,
+            target: "_blank",
+            rel: "noopener noreferrer",
+          });
+          link.textContent = part.replace(/^https?:\/\//, "");
+          p.append(link);
+        } else if (part) {
+          // Keep single line breaks inside a paragraph.
+          part.split("\n").forEach((line, j) => {
+            if (j) {
+              p.append(el("br"));
+            }
+            p.append(line);
+          });
+        }
+      });
+      container.append(p);
+    }
+  }
+
+  function goToPage(page) {
+    if (page >= 1 && page <= pagesCount()) {
+      suppressScrollUntil = performance.now() + 800;
+      app().page = page;
+    }
+  }
+
+  // --- Saved words (on this device) ---
+
+  function savedWords() {
+    try {
+      return JSON.parse(storageGet("ruiSavedWords")) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function isWordSaved(word) {
+    return !!savedWords()[word.toLowerCase()];
+  }
+
+  function toggleSavedWord(word, definition) {
+    const words = savedWords();
+    const key = word.toLowerCase();
+    if (words[key]) {
+      delete words[key];
+    } else {
+      const data = window.getBookUrlData?.();
+      words[key] = {
+        word,
+        definition: definition || "",
+        savedAt: Date.now(),
+        book: data?.bookName || "",
+        page: currentPage(),
+      };
+    }
+    storageSet("ruiSavedWords", JSON.stringify(words));
+    return !!words[key];
+  }
+
+  // --- The sheet ---
+
+  const NOTEBOOK_TABS = [
+    { id: "contents", label: "Contents" },
+    { id: "highlights", label: "Highlights" },
+    { id: "notes", label: "Notes" },
+    { id: "words", label: "Words" },
+  ];
+
+  function openNotebook(tab = notebook.tab) {
+    notebook.tab = tab;
+    openSheet("Notebook", body => {
+      body.classList.add("rui-notebook");
+      const tabs = el("div", "rui-tabs", {
+        role: "tablist",
+        "aria-label": "Notebook",
+      });
+      const panel = el("div", "rui-tabpanel", { role: "tabpanel" });
+      const buttons = NOTEBOOK_TABS.map(({ id, label }) => {
+        const button = el("button", "rui-tab", { type: "button", role: "tab" });
+        button.textContent = label;
+        const count = tabCount(id);
+        if (count) {
+          const badge = el("span", "rui-tab-count");
+          badge.textContent = String(count);
+          button.append(badge);
+        }
+        button.addEventListener("click", () => {
+          notebook.tab = id;
+          select();
+        });
+        tabs.append(button);
+        return { id, button };
+      });
+      const select = () => {
+        for (const { id, button } of buttons) {
+          button.setAttribute("aria-selected", String(id === notebook.tab));
+        }
+        panel.replaceChildren();
+        RENDER_TAB[notebook.tab](panel);
+      };
+      body.append(tabs, panel);
+      select();
+    });
+  }
+
+  function tabCount(id) {
+    if (id === "highlights") {
+      return bookHighlights().length;
+    }
+    if (id === "notes") {
+      return notebook.notes.length;
+    }
+    if (id === "words") {
+      return Object.keys(savedWords()).length;
+    }
+    return 0;
+  }
+
+  function emptyState(panel, text) {
+    const p = el("p", "rui-empty");
+    p.textContent = text;
+    panel.append(p);
+  }
+
+  function chipRow(options, current, onPick) {
+    const row = el("div", "rui-chips", { role: "group" });
+    for (const option of options) {
+      const chip = el("button", "rui-chip-toggle", {
+        type: "button",
+        "aria-pressed": String(option.id === current),
+      });
+      if (option.swatch) {
+        chip.append(
+          el("span", `rui-dot rui-swatch-${option.swatch}`, {
+            "aria-hidden": "true",
+          })
+        );
+      }
+      chip.append(option.label);
+      chip.addEventListener("click", () => onPick(option.id));
+      row.append(chip);
+    }
+    return row;
+  }
+
+  // --- Contents ---
+
+  function renderContents(panel) {
+    const tree = outline();
+    if (!tree) {
+      emptyState(panel, "This book has no table of contents.");
+      return;
+    }
+    const label = el("label", "rui-visually-hidden", { for: "ruiTocFilter" });
+    label.textContent = "Filter chapters";
+    const filter = el("input", "rui-input rui-filter", {
+      id: "ruiTocFilter",
+      type: "search",
+      placeholder: "Filter chapters",
+      autocomplete: "off",
+    });
+    filter.value = notebook.contentsFilter;
+    const list = el("div", "rui-toc");
+    const current = new Set(outlinePath(currentPage()));
+    const draw = () => {
+      list.replaceChildren();
+      const query = notebook.contentsFilter.trim().toLowerCase();
+      if (query) {
+        const matches = [];
+        const walk = nodes => {
+          for (const node of nodes || []) {
+            if (node.title?.toLowerCase().includes(query)) {
+              matches.push(node);
+            }
+            walk(node.items);
+          }
+        };
+        walk(tree.items);
+        if (!matches.length) {
+          emptyState(list, "No chapter matches.");
+        }
+        for (const node of matches) {
+          list.append(tocRow(node, 0, current, false));
+        }
+        return;
+      }
+      const add = (nodes, depth, parent) => {
+        for (const node of nodes || []) {
+          const hasChildren = !!node.items?.length;
+          const row = tocRow(node, depth, current, hasChildren);
+          parent.append(row);
+          if (hasChildren) {
+            const children = el("div", "rui-toc-children");
+            children.hidden = !current.has(node);
+            add(node.items, depth + 1, children);
+            parent.append(children);
+            const toggle = row.querySelector(".rui-toc-toggle");
+            toggle.setAttribute("aria-expanded", String(!children.hidden));
+            toggle.addEventListener("click", () => {
+              children.hidden = !children.hidden;
+              toggle.setAttribute("aria-expanded", String(!children.hidden));
+            });
+          }
+        }
+      };
+      add(tree.items, 0, list);
+    };
+    filter.addEventListener("input", () => {
+      notebook.contentsFilter = filter.value;
+      draw();
+    });
+    panel.append(label, filter, list);
+    draw();
+    requestAnimationFrame(() =>
+      list
+        .querySelector('[aria-current="true"]')
+        ?.scrollIntoView({ block: "center" })
+    );
+  }
+
+  function tocRow(node, depth, current, hasChildren) {
+    const row = el("div", "rui-toc-row");
+    row.style.setProperty("--rui-depth", depth);
+    if (hasChildren) {
+      const toggle = el("button", "rui-toc-toggle", {
+        type: "button",
+        "aria-label": `Show sections of ${node.title}`,
+      });
+      // Static markup (icons and fixed labels only).
+      // eslint-disable-next-line no-unsanitized/property
+      toggle.innerHTML = icon("chevronRight");
+      row.append(toggle);
+    } else {
+      row.append(el("span", "rui-toc-spacer", { "aria-hidden": "true" }));
+    }
+    const link = el("button", "rui-toc-link", { type: "button" });
+    const title = el("span", "rui-toc-title");
+    title.textContent = String(node.title || "")
+      .replaceAll(/\s+/g, " ")
+      .trim();
+    const page = el("span", "rui-toc-page");
+    page.textContent = node.dest >= 1 ? String(node.dest) : "";
+    link.append(title, page);
+    // The deepest section containing the current page is "current".
+    const path = [...current];
+    if (path.at(-1) === node) {
+      link.setAttribute("aria-current", "true");
+    }
+    link.addEventListener("click", () => {
+      goToPage(node.dest);
+      closeSheet();
+    });
+    row.append(link);
+    return row;
+  }
+
+  // --- Highlights ---
+
+  function renderHighlights(panel) {
+    const all = bookHighlights();
+    if (!all.length) {
+      emptyState(
+        panel,
+        "No highlights in this book yet. Select text and pick a colour to highlight it."
+      );
+      return;
+    }
+    const options = [{ id: "all", label: `All ${all.length}` }].concat(
+      HIGHLIGHT_COLORS.filter(c =>
+        all.some(h => highlightColor(h) === c.name)
+      ).map(c => ({
+        id: c.name,
+        label: HIGHLIGHT_LABELS[c.name],
+        swatch: c.name,
+      }))
+    );
+    if (!options.some(o => o.id === notebook.highlightColor)) {
+      notebook.highlightColor = "all";
+    }
+    const list = el("div", "rui-cards");
+    const draw = () => {
+      list.replaceChildren();
+      const shown = all.filter(
+        h =>
+          notebook.highlightColor === "all" ||
+          highlightColor(h) === notebook.highlightColor
+      );
+      for (const highlight of shown) {
+        list.append(highlightCard(highlight, panel));
+      }
+    };
+    panel.append(
+      chipRow(options, notebook.highlightColor, id => {
+        notebook.highlightColor = id;
+        panel.replaceChildren();
+        renderHighlights(panel);
+      }),
+      list
+    );
+    draw();
+  }
+
+  function highlightCard(highlight, panel) {
+    const card = el(
+      "article",
+      `rui-card rui-card-${highlightColor(highlight)}`
+    );
+    const open = el("button", "rui-card-main", { type: "button" });
+    const meta = el("span", "rui-card-meta");
+    meta.textContent = `Page ${highlight.pageNo}`;
+    const quote = el("span", "rui-card-quote");
+    quote.textContent = highlight.text || "(highlight)";
+    open.append(meta, quote);
+    open.addEventListener("click", () => {
+      goToPage(highlight.pageNo);
+      closeSheet();
+    });
+    const remove = el("button", "rui-icon-btn rui-card-action", {
+      type: "button",
+      "aria-label": "Delete highlight",
+      title: "Delete highlight",
+    });
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    remove.innerHTML = icon("trash");
+    remove.addEventListener("click", () => {
+      const copy = { ...highlight };
+      window.removeHighlight?.(highlight.id);
+      panel.replaceChildren();
+      renderHighlights(panel);
+      toast("Highlight deleted.", {
+        actionLabel: "Undo",
+        timeout: 6000,
+        onAction: () => {
+          // Saving the same highlight (same id) restores it in the app.
+          window.parent.postMessage(
+            { type: "saveHighlight", payload: copy },
+            "*"
+          );
+          window.addHighlights?.([copy]);
+          if (panel.isConnected) {
+            panel.replaceChildren();
+            renderHighlights(panel);
+          }
+        },
+      });
+    });
+    card.append(open, remove);
+    return card;
+  }
+
+  // --- Notes ---
+
+  function renderNotes(panel) {
+    const page = currentPage();
+    const scopes = [
+      { id: "page", label: `This page ${notesOnPage(page).length}` },
+      { id: "book", label: `Whole book ${notebook.notes.length}` },
+    ];
+    panel.append(
+      chipRow(scopes, notebook.noteScope, id => {
+        notebook.noteScope = id;
+        panel.replaceChildren();
+        renderNotes(panel);
+      })
+    );
+    const notes =
+      notebook.noteScope === "page"
+        ? notesOnPage(page)
+        : [...notebook.notes].sort((a, b) => a.pageNo - b.pageNo);
+    if (!notes.length) {
+      emptyState(
+        panel,
+        notebook.noteScope === "page"
+          ? "No notes from the BAWS.in Team on this page."
+          : "No notes from the BAWS.in Team in this book yet."
+      );
+      return;
+    }
+    const list = el("div", "rui-cards");
+    for (const note of notes) {
+      list.append(noteCard(note));
+    }
+    panel.append(list);
+  }
+
+  function noteCard(note) {
+    const card = el(
+      "article",
+      `rui-card rui-note rui-note-${
+        note.kind in NOTE_KINDS ? note.kind : "note"
+      }`
+    );
+    card.dataset.noteId = note.id;
+    const head = el("div", "rui-note-head");
+    const kind = el("span", "rui-note-kind");
+    kind.textContent = NOTE_KINDS[note.kind] || "Note";
+    const meta = el("span", "rui-card-meta");
+    const date = note.updatedAt ? new Date(note.updatedAt) : null;
+    meta.textContent = [
+      note.author || "BAWS.in Team",
+      `Page ${note.pageNo}`,
+      date && !isNaN(date) ? date.toLocaleDateString() : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    head.append(kind, meta);
+    card.append(head);
+    if (note.title) {
+      const title = el("h3", "rui-note-title");
+      title.textContent = note.title;
+      card.append(title);
+    }
+    if (note.anchor?.exact) {
+      const quote = el("blockquote", "rui-note-quote");
+      quote.textContent = note.anchor.exact;
+      card.append(quote);
+    }
+    const body = el("div", "rui-note-body");
+    renderPlainText(body, note.body);
+    card.append(body);
+    if (note.pageNo !== currentPage()) {
+      const go = el("button", "rui-chip", { type: "button" });
+      go.textContent = "Go to passage";
+      go.addEventListener("click", () => {
+        goToPage(note.pageNo);
+        closeSheet();
+        setTimeout(() => flashNoteMarker(note.id), 900);
+      });
+      card.append(go);
+    }
+    return card;
+  }
+
+  /** Opens this page's notes in the Notebook (from a mark or a toast). */
+  function openNotesFor() {
+    notebook.noteScope = "page";
+    openNotebook("notes");
+  }
+
+  const RENDER_TAB = {
+    contents: renderContents,
+    highlights: renderHighlights,
+    notes: renderNotes,
+    words: renderWords,
+  };
+
+  // --- Words ---
+
+  function renderWords(panel) {
+    const words = Object.values(savedWords()).sort(
+      (a, b) => b.savedAt - a.savedAt
+    );
+    if (!words.length) {
+      emptyState(
+        panel,
+        "Save words from their meaning card to build your own list. Select a word and tap Define."
+      );
+      return;
+    }
+    const list = el("div", "rui-cards");
+    for (const entry of words) {
+      const card = el("article", "rui-card rui-word");
+      const open = el("button", "rui-card-main", { type: "button" });
+      const word = el("span", "rui-word-term");
+      word.textContent = entry.word;
+      const meaning = el("span", "rui-card-quote");
+      meaning.textContent = entry.definition || "No meaning saved.";
+      open.append(word, meaning);
+      open.addEventListener("click", () => {
+        closeSheet();
+        showDefinition(entry.word, entry.definition);
+      });
+      const remove = el("button", "rui-icon-btn rui-card-action", {
+        type: "button",
+        "aria-label": `Remove ${entry.word}`,
+        title: "Remove",
+      });
+      // Static markup (icons and fixed labels only).
+      // eslint-disable-next-line no-unsanitized/property
+      remove.innerHTML = icon("trash");
+      remove.addEventListener("click", () => {
+        toggleSavedWord(entry.word);
+        panel.replaceChildren();
+        renderWords(panel);
+      });
+      card.append(open, remove);
+      list.append(card);
+    }
+    panel.append(list);
+  }
+
+  // --- Notes on the page: margin marks ---
+
+  /**
+   * Finds `anchor.exact` in a page's text and returns its top offset (px)
+   * within the page element, or null. Whitespace differences are ignored;
+   * if that fails, words glued together in the PDF text are tolerated by
+   * matching without any whitespace. prefix/suffix pick between repeats.
+   */
+  function locateAnchor(pageDiv, anchor) {
+    const root =
+      pageDiv.querySelector(".textLayer") || pageDiv.querySelector(".textView");
+    if (!root || !anchor?.exact) {
+      return null;
+    }
+    for (const keepSpaces of [true, false]) {
+      const map = [];
+      let text = "";
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const value = node.nodeValue;
+        for (let i = 0; i < value.length; i++) {
+          const isSpace = /\s/.test(value[i]);
+          if (isSpace && (!keepSpaces || text.endsWith(" ") || !text)) {
+            continue;
+          }
+          text += isSpace ? " " : value[i].toLowerCase();
+          map.push([node, i]);
+        }
+        if (keepSpaces && !text.endsWith(" ") && text) {
+          text += " "; // spans are separate words more often than not
+          map.push([node, value.length]);
+        }
+      }
+      const norm = s => {
+        const lower = String(s || "").toLowerCase();
+        return keepSpaces
+          ? lower.replaceAll(/\s+/g, " ").trim()
+          : lower.replaceAll(/\s+/g, "");
+      };
+      const needle = norm(anchor.exact);
+      if (!needle) {
+        return null;
+      }
+      const prefix = norm(anchor.prefix).slice(-20);
+      const suffix = norm(anchor.suffix).slice(0, 20);
+      let best = -1;
+      let bestScore = -1;
+      for (
+        let at = text.indexOf(needle);
+        at !== -1;
+        at = text.indexOf(needle, at + 1)
+      ) {
+        let score = 0;
+        if (
+          prefix &&
+          text.slice(Math.max(0, at - prefix.length - 1), at).includes(prefix)
+        ) {
+          score++;
+        }
+        if (
+          suffix &&
+          text
+            .slice(at + needle.length, at + needle.length + suffix.length + 1)
+            .includes(suffix)
+        ) {
+          score++;
+        }
+        if (score > bestScore) {
+          best = at;
+          bestScore = score;
+        }
+      }
+      if (best === -1) {
+        continue;
+      }
+      const [node, offset] = map[best];
+      const range = document.createRange();
+      range.setStart(node, Math.min(offset, node.nodeValue.length));
+      range.setEnd(node, Math.min(offset + 1, node.nodeValue.length));
+      const rect = range.getClientRects()[0] || range.getBoundingClientRect();
+      if (!rect || (!rect.width && !rect.height)) {
+        continue;
+      }
+      return rect.top - pageDiv.getBoundingClientRect().top;
+    }
+    return null;
+  }
+
+  function renderNoteMarkers(pageNumber) {
+    const pageDiv = document.querySelector(
+      `.page[data-page-number='${pageNumber}']`
+    );
+    if (!pageDiv) {
+      return;
+    }
+    pageDiv.querySelectorAll(".rui-note-marker").forEach(m => m.remove());
+    const notes = notesOnPage(pageNumber);
+    if (!notes.length) {
+      return;
+    }
+    const pageRect = pageDiv.getBoundingClientRect();
+    const height = pageRect.height;
+    // On phones the page is wider than the screen (its margins are cropped
+    // on purpose), so keep the marks inside the visible part of the page.
+    const containerRect = document
+      .getElementById("viewerContainer")
+      .getBoundingClientRect();
+    const hiddenRight = Math.max(0, pageRect.right - containerRect.right);
+    const byTop = new Map();
+    for (const note of notes) {
+      let top = locateAnchor(pageDiv, note.anchor);
+      if (
+        top === null &&
+        note.anchor?.rects?.[0] &&
+        window.VIEW_MODE !== "text"
+      ) {
+        top = (note.anchor.rects[0].topPercent / 100) * height;
+      }
+      const key = top === null ? "page" : Math.round(top / 24); // group close marks
+      if (!byTop.has(key)) {
+        byTop.set(key, { top, notes: [] });
+      }
+      byTop.get(key).notes.push(note);
+    }
+    for (const { top, notes: group } of byTop.values()) {
+      const marker = el("button", "rui-note-marker", {
+        type: "button",
+        "aria-label": `${group.length} note${
+          group.length > 1 ? "s" : ""
+        } from the BAWS.in Team`,
+        title: group
+          .map(n => n.title || NOTE_KINDS[n.kind] || "Note")
+          .join(" · "),
+      });
+      marker.dataset.noteIds = group.map(n => n.id).join(" ");
+      if (group.some(n => n.kind === "disputed")) {
+        marker.classList.add("rui-note-marker-disputed");
+      }
+      // Static markup (icons and fixed labels only).
+      // eslint-disable-next-line no-unsanitized/property
+      marker.innerHTML = icon("note") + "<span></span>";
+      marker.querySelector("span").textContent = String(group.length);
+      marker.style.right = `${hiddenRight + 6}px`;
+      if (top === null) {
+        marker.classList.add("rui-note-marker-page");
+      } else {
+        marker.style.top = `${Math.max(0, top - 2)}px`;
+      }
+      marker.addEventListener("click", () => openNotesFor(pageNumber));
+      pageDiv.append(marker);
+    }
+  }
+
+  function renderAllNoteMarkers() {
+    document.querySelectorAll(".page[data-loaded]").forEach(page => {
+      renderNoteMarkers(Number(page.dataset.pageNumber));
+    });
+  }
+
+  function flashNoteMarker(noteId) {
+    const marker = [...document.querySelectorAll(".rui-note-marker")].find(m =>
+      m.dataset.noteIds.split(" ").includes(String(noteId))
+    );
+    if (marker) {
+      marker.classList.remove("rui-flash");
+      void marker.offsetWidth; // restart the animation
+      marker.classList.add("rui-flash");
+    }
+  }
+
+  function maybeToastNotes() {
+    const page = currentPage();
+    const count = notesOnPage(page).length;
+    if (!count || notebook.toastedPages.has(page)) {
+      return;
+    }
+    notebook.toastedPages.add(page);
+    toast(
+      `${count} note${count > 1 ? "s" : ""} from the BAWS.in Team on this page`,
+      {
+        actionLabel: "View",
+        onAction: () => openNotesFor(page),
+        timeout: 6000,
+      }
+    );
+  }
+
+  // --- Marks on the page slider ---
+
+  function renderSliderMarks() {
+    const total = pagesCount();
+    if (!ui.marks || total < 2) {
+      return;
+    }
+    ui.marks.replaceChildren();
+    const place = (page, className) => {
+      const mark = el("span", className);
+      mark.style.left = `${((page - 1) / (total - 1)) * 100}%`;
+      ui.marks.append(mark);
+    };
+    const highlightPages = new Map();
+    for (const h of bookHighlights()) {
+      if (!highlightPages.has(h.pageNo)) {
+        highlightPages.set(h.pageNo, highlightColor(h));
+      }
+    }
+    for (const [page, color] of highlightPages) {
+      place(page, `rui-mark rui-mark-highlight rui-swatch-${color}`);
+    }
+    for (const page of new Set(notebook.notes.map(n => n.pageNo))) {
+      place(page, "rui-mark rui-mark-note");
+    }
+  }
+
+  function setNotes(list) {
+    notebook.notes = (Array.isArray(list) ? list : [])
+      .filter(
+        note =>
+          note &&
+          note.id !== undefined &&
+          note.id !== null &&
+          Number.isInteger(note.pageNo)
+      )
+      .filter(note => !note.url || inThisBook(note));
+    renderAllNoteMarkers();
+    renderSliderMarks();
+    maybeToastNotes();
+  }
+
+  function wireNotebook() {
+    // BAWS.in Team notes for the whole book, from the app:
+    // {type: "loadAnnotations", payload: [{id, pageNo, url, anchor: {exact,
+    //  prefix, suffix, rects?}, kind, title, body, author, updatedAt}]}
+    window.addEventListener("message", event => {
+      let data = event.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if ((data?.type || data?.action) === "loadAnnotations") {
+        setNotes(data.payload || data.data);
+      }
+    });
+    document.addEventListener("baws:highlightschange", renderSliderMarks);
+    const bus = app().eventBus;
+    bus._on("textlayerrendered", e => renderNoteMarkers(e.pageNumber));
+    bus._on("pagerendered", e => {
+      if (window.VIEW_MODE === "text") {
+        renderNoteMarkers(e.pageNumber);
+      }
+    });
+    let toastTimer = null;
+    bus._on("pagechanging", () => {
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(maybeToastNotes, 700);
+    });
+    bus._on("pagesloaded", renderSliderMarks);
+    // Zoom and window size change what part of the page is visible.
+    let placeTimer = null;
+    const replaceMarks = () => {
+      clearTimeout(placeTimer);
+      placeTimer = setTimeout(renderAllNoteMarkers, 250);
+    };
+    bus._on("scalechanging", replaceMarks);
+    window.addEventListener("resize", replaceMarks);
+    renderSliderMarks();
+  }
+
+  // ---------------------------------------------------------------------
   // Built-in actions
   // ---------------------------------------------------------------------
 
@@ -1904,7 +2763,7 @@
       placements: ["dock"],
       priority: 50,
       elementId: "ruiContents",
-      run: () => app()?.pdfSidebar?.toggle(),
+      run: () => openNotebook("contents"),
     });
     registerAction({
       id: "listen",
@@ -1975,6 +2834,16 @@
     });
 
     // More sheet: Reading
+    registerAction({
+      id: "notebook",
+      label: "Notebook",
+      icon: "notebook",
+      placements: ["more"],
+      group: "Reading",
+      priority: 110,
+      run: () =>
+        openNotebook(notebook.tab === "contents" ? "highlights" : notebook.tab),
+    });
     registerAction({
       id: "goToPage",
       label: "Go to page",
@@ -2126,6 +2995,7 @@
       wireGestures(container);
       wireSelectionBar(container);
       wirePlayer();
+      wireNotebook();
       a.eventBus._on("pagechanging", () => {
         hideSelectionBar();
         closeDefinition();
@@ -2151,6 +3021,7 @@
     registerAction,
     toast,
     showDefinition,
+    openNotebook,
     openSheet,
     closeSheet,
     showControls: () => setChromeHidden(false),

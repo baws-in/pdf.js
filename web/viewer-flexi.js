@@ -95,6 +95,7 @@ onDomReady(function () {
       const pdfDoc = PDFViewerApplication.pdfDocument;
       console.log("iframe: Received highlights from parent.");
       storedHighlights = payload || [];
+      notifyHighlightsChanged();
       if (pdfDoc) {
         const current_pageNumber =
           PDFViewerApplication.pdfLinkService.pdfViewer._currentPageNumber;
@@ -1641,6 +1642,21 @@ async function shareButtonClick(isLongPressShare) {
 // highlights without one (all older bookmarks) are yellow.
 const HIGHLIGHT_COLORS = ["yellow", "blue", "green", "pink"];
 
+/** Lets the new reader UI (Notebook, page slider) follow the highlights. */
+function notifyHighlightsChanged() {
+  document.dispatchEvent(
+    new CustomEvent("baws:highlightschange", {
+      detail: { highlights: storedHighlights },
+    })
+  );
+}
+
+/** Deletes a highlight here and tells the app to delete it too. */
+function removeHighlight(id) {
+  deleteHighlight(id);
+  window.parent.postMessage({ type: "deleteHighlight", payload: id }, "*");
+}
+
 function highlightColorOf(highlight) {
   return HIGHLIGHT_COLORS.includes(highlight?.color)
     ? highlight.color
@@ -1810,6 +1826,7 @@ function addHighlights(newHighlights) {
   }
 
   storedHighlights.push(...newHighlights);
+  notifyHighlightsChanged();
 
   console.log(`${newHighlights.length} new highlight(s) added and saved.`);
 
@@ -1948,6 +1965,7 @@ function deleteHighlight(id) {
   const index = storedHighlights.findIndex(h => h.id === id);
   if (index > -1) {
     storedHighlights.splice(index, 1);
+    notifyHighlightsChanged();
 
     // Remove from the DOM
     const groupElement = viewer.querySelector(
