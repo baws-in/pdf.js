@@ -82,6 +82,44 @@ html.rui #viewerContainer {
   background-color: var(--rui-page-bg);
 }
 
+/* pdf.js's own sidebar (Contents) and find bar take these variables; feed
+   them from the reader theme. Without this the Contents tree is white text
+   on no background, which disappears on the light page background. */
+html.rui {
+  --sidebar-narrow-bg-color: var(--rui-surface-solid);
+  --sidebar-toolbar-bg-color: var(--rui-surface-solid);
+  --treeitem-color: var(--rui-ink);
+  --treeitem-bg-color: var(--rui-hover);
+  --treeitem-hover-color: var(--rui-ink);
+  --treeitem-selected-color: var(--rui-accent-ink);
+  --treeitem-selected-bg-color: var(--rui-accent-soft);
+  --toolbar-icon-bg-color: var(--rui-ink);
+  --toolbar-icon-hover-bg-color: var(--rui-ink);
+  --toolbar-bg-color: var(--rui-surface-solid);
+  --toolbar-border-color: var(--rui-line);
+  --main-color: var(--rui-ink);
+  --field-color: var(--rui-ink);
+  --field-bg-color: var(--rui-surface-solid);
+  --field-border-color: var(--rui-line);
+  --doorhanger-bg-color: var(--rui-surface-solid);
+  --doorhanger-border-color: var(--rui-line);
+  --button-hover-color: var(--rui-hover);
+}
+
+html.rui #sidebarContainer {
+  background-color: var(--rui-surface-solid);
+  border-inline-end: 1px solid var(--rui-line);
+  box-shadow: var(--rui-shadow);
+}
+
+html.rui #sidebarContent {
+  box-shadow: none;
+}
+
+html.rui #outlineView .treeItem > a {
+  font-family: var(--rui-font);
+}
+
 /* "Fit to phone" text: follows the theme and the text size setting. */
 html.rui .pdfViewer .textView {
   background: var(--rui-text-bg);
