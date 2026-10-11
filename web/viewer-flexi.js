@@ -1269,6 +1269,12 @@ function detectMobileOS() {
   return "Unknown";
 }
 
+function isWindowsDesktop() {
+  const platform =
+    navigator.userAgentData?.platform || navigator.platform || "";
+  return /^win/i.test(platform);
+}
+
 function uuidv4() {
   return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
     (
@@ -1278,18 +1284,81 @@ function uuidv4() {
   );
 }
 
-// Removes the temporary yellow spans added for the share image and puts the
-// original text back. Safe to call more than once.
-function restoreHighlightSpans(highlightSpans) {
-  while (highlightSpans.length > 0) {
-    const span = highlightSpans.pop();
-    const parent = span.parentNode;
-    if (!parent) continue;
-    while (span.firstChild) {
-      parent.insertBefore(span.firstChild, span);
-    }
-    parent.removeChild(span);
+// Draws the share image straight from the current page's canvas: the page,
+// its saved highlights, the selection in yellow and a QR code linking to the
+// page. Copying the page's HTML instead (html2canvas) could take longer than
+// the few seconds a browser allows between the tap and navigator.share(),
+// and the share was then refused.
+async function makeSharePageImage(pageUrl) {
+  const pageView = PDFViewerApplication.pdfViewer.getPageView(
+    PDFViewerApplication.page - 1
+  );
+  const source = pageView?.canvas;
+  if (!source?.width) {
+    return null;
   }
+  // Start the QR code first: its logo image loads over the network.
+  const qrSize = Math.round(source.height * 0.07);
+  const qrData = Promise.race([
+    getQRCode(pageUrl, qrSize).getRawData("png"),
+    sleep(2000).then(() => null), // share without it rather than wait
+  ]).catch(() => null);
+
+  const image = document.createElement("canvas");
+  image.width = source.width;
+  image.height = source.height;
+  const ctx = image.getContext("2d");
+  ctx.drawImage(source, 0, 0);
+
+  // Screen rectangles to canvas pixels.
+  const box = source.getBoundingClientRect();
+  const scale = source.width / box.width;
+  const fill = (rect, color) => {
+    if (rect.right <= box.left || rect.left >= box.right) {
+      return;
+    }
+    if (rect.bottom <= box.top || rect.top >= box.bottom) {
+      return;
+    }
+    ctx.fillStyle = color;
+    ctx.fillRect(
+      (rect.left - box.left) * scale,
+      (rect.top - box.top) * scale,
+      rect.width * scale,
+      rect.height * scale
+    );
+  };
+  // "multiply" tints like a highlighter pen and keeps the text readable.
+  ctx.globalCompositeOperation = "multiply";
+  for (const layer of pageView.div.querySelectorAll(".highlight-layer")) {
+    fill(
+      layer.getBoundingClientRect(),
+      getComputedStyle(layer).backgroundColor
+    );
+  }
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0 && !selection.isCollapsed) {
+    for (const rect of selection.getRangeAt(0).getClientRects()) {
+      fill(rect, "rgb(255, 240, 0)");
+    }
+  }
+  ctx.globalCompositeOperation = "source-over";
+
+  const qrBlob = await qrData;
+  if (qrBlob) {
+    const qr = await createImageBitmap(qrBlob);
+    const margin = Math.round(source.height * 0.001);
+    ctx.drawImage(
+      qr,
+      image.width - qrSize - margin,
+      image.height - qrSize - margin,
+      qrSize,
+      qrSize
+    );
+  }
+  return new Promise(resolve => {
+    image.toBlob(resolve, "image/png");
+  });
 }
 
 async function shareBookPageContent(
@@ -1298,148 +1367,23 @@ async function shareBookPageContent(
   pageUrl,
   isLongPressShare
 ) {
-  const highlightSpans = [];
+  let imageBlob = null;
   try {
-    // Get the HTML element to convert into an image
-    var bookPageElement = document.getElementsByClassName("page")[0];
-
-    if (!bookPageElement) {
-      console.log("The 'bookPage' element was not found on the page.");
+    if (window.VIEW_MODE === "pdf" && isLongPressShare) {
+      // Long press: download a large QR code for the page.
+      getQRCode(
+        pageUrl,
+        600,
+        "https://baws.in/baws_social_logo.png",
+        50
+      ).download({ name: uuidv4(), extension: "png" });
       return;
     }
-    var selection = window.getSelection();
-    if (selection.rangeCount > 0 && "pdf" == window.VIEW_MODE) {
-      // Highlight the selected text
-      const range = selection.getRangeAt(0);
+    imageBlob =
+      window.VIEW_MODE === "pdf" ? await makeSharePageImage(pageUrl) : null;
+    window.getSelection()?.removeAllRanges();
 
-      if (
-        range.startContainer === range.endContainer &&
-        range.startContainer.nodeType === Node.TEXT_NODE
-      ) {
-        // Case 1: Selection is within a single text node
-        const parent = range.startContainer.parentNode;
-        const startNode = range.startContainer;
-
-        const textBefore = startNode.textContent.slice(0, range.startOffset);
-        const selected = startNode.textContent.slice(
-          range.startOffset,
-          range.endOffset
-        );
-        const textAfter = startNode.textContent.slice(range.endOffset);
-
-        // Create spans for all portions of the text
-        let beforeSpan = null;
-
-        if (textBefore) {
-          beforeSpan = document.createElement("span");
-          beforeSpan.style.backgroundColor = parent.style.backgroundColor;
-          //copySpanContentAndStyles(parent,beforeSpan)
-          beforeSpan.textContent = textBefore;
-          parent.insertBefore(beforeSpan, startNode);
-          highlightSpans.push(beforeSpan);
-        }
-
-        const highlightSpan = document.createElement("span");
-        //copySpanContentAndStyles(parent,highlightSpan);
-        highlightSpan.style.backgroundColor = "yellow";
-        highlightSpan.display = "inline-block";
-        if ("text" == window.VIEW_MODE) highlightSpan.style.color = "black";
-        else highlightSpan.style.color = "yellow";
-        highlightSpan.textContent = selected;
-        parent.insertBefore(
-          highlightSpan,
-          beforeSpan ? beforeSpan.nextSibling : startNode
-        );
-        highlightSpans.push(highlightSpan);
-
-        if (textAfter) {
-          const afterSpan = document.createElement("span");
-          //copySpanContentAndStyles(parent,afterSpan);
-          afterSpan.style.backgroundColor = "transparent";
-          afterSpan.textContent = textAfter;
-          parent.insertBefore(afterSpan, highlightSpan.nextSibling);
-          highlightSpans.push(afterSpan);
-        }
-
-        // Remove the original text node
-        parent.removeChild(startNode);
-      } else {
-        // Case 2: Selection spans multiple text nodes
-        const walker = document.createTreeWalker(
-          range.commonAncestorContainer,
-          NodeFilter.SHOW_TEXT,
-          {
-            acceptNode: node =>
-              range.intersectsNode(node)
-                ? NodeFilter.FILTER_ACCEPT
-                : NodeFilter.FILTER_REJECT,
-          }
-        );
-
-        let currentNode;
-        while ((currentNode = walker.nextNode())) {
-          const parent = currentNode.parentNode;
-
-          // Split the text node if necessary
-          if (currentNode === range.startContainer && range.startOffset > 0) {
-            currentNode = currentNode.splitText(range.startOffset);
-          }
-          if (
-            currentNode === range.endContainer &&
-            range.endOffset < currentNode.length
-          ) {
-            currentNode.splitText(range.endOffset);
-          }
-
-          // Highlight the selected text node
-          const highlightSpan = document.createElement("span");
-          highlightSpan.style.backgroundColor = "yellow";
-          if ("text" == window.VIEW_MODE) highlightSpan.style.color = "black";
-          else highlightSpan.style.color = "transparent";
-          parent.replaceChild(highlightSpan, currentNode);
-          highlightSpan.appendChild(currentNode);
-
-          highlightSpans.push(highlightSpan);
-        }
-      }
-    }
-    if (window.getSelection) {
-      window.getSelection().removeAllRanges();
-    }
-    var qrCode = null;
-    var canvas = null;
-    if ("pdf" == window.VIEW_MODE) {
-      if (!isLongPressShare) {
-        qrCode = getQRCode(pageUrl, bookPageElement.offsetHeight * 0.07);
-        // Convert the element to a canvas using html2canvas
-        canvas = await html2canvas(bookPageElement, {
-          onclone: async function (doc) {
-            if ("text" == window.VIEW_MODE || !qrCode) return;
-            const canvasWrapper = doc.getElementsByClassName("page")[0];
-            var qrCodeElement = doc.createElement("div");
-            //qrCodeElement.style.transform = "translateX(-50%)";
-            qrCode.append(qrCodeElement);
-            canvasWrapper.appendChild(qrCodeElement);
-            qrCodeElement.style.position = "absolute";
-            qrCodeElement.style.bottom = "0.1%";
-            qrCodeElement.style.right = "0.1%";
-            await sleep(1000);
-          },
-        });
-      } else {
-        qrCode = getQRCode(
-          pageUrl,
-          600,
-          "https://baws.in/baws_social_logo.png",
-          50
-        );
-        qrCode.download({ name: uuidv4(), extension: "png" });
-        restoreHighlightSpans(highlightSpans);
-        return;
-      }
-    }
-
-    if (!canvas) {
+    if (!imageBlob) {
       // Reflowed text mode has no page image; share the text and link only.
       if (navigator.share) {
         await navigator.share({ title, text: selectedText, url: pageUrl });
@@ -1447,11 +1391,18 @@ async function shareBookPageContent(
       return;
     }
 
-    const imageBlob = await new Promise(resolve =>
-      canvas.toBlob(resolve, "image/png")
-    );
-
-    restoreHighlightSpans(highlightSpans);
+    // Windows' share window often fails for images from Chrome, and only
+    // after a long wait ("AbortError: Share failed"), so on Windows the
+    // image is downloaded straight away; the text and link are already in
+    // the clipboard.
+    if (!window.parent?.isNativeApp && isWindowsDesktop()) {
+      saveShareImage(imageBlob);
+      genericShowPanel(
+        "Page image downloaded. The text and link are copied, please paste to share",
+        4000
+      );
+      return;
+    }
 
     if (
       !navigator.canShare ||
@@ -1473,12 +1424,7 @@ async function shareBookPageContent(
           }), "*");
         } else {
           // Standard web fallback (download the image locally)
-          const a = document.createElement("a");
-          a.href = base64data;
-          a.download = uuidv4() + ".png";
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+          saveShareImage(imageBlob);
         }
       };
       reader.readAsDataURL(imageBlob);
@@ -1504,12 +1450,33 @@ async function shareBookPageContent(
     }
   } catch (error) {
     console.error("Error sharing content:", error);
-    restoreHighlightSpans(highlightSpans);
+    // Closing the share window ("Share canceled") stays cancelled. Any other
+    // failure, e.g. Chrome on Windows "AbortError: Share failed", saves the
+    // image instead; the text and link are already in the clipboard.
+    if (imageBlob && !/cancel/i.test(error?.message || "")) {
+      saveShareImage(imageBlob);
+      genericShowPanel(
+        "Couldn't open the share window, so the page image was downloaded. The text and link are copied, please paste to share",
+        5000
+      );
+      return;
+    }
   }
   genericShowPanel(
     "Selected text and address to current page copied to clipboard, please paste to share",
     3000
   );
+}
+
+/** Downloads the share image (when the browser can't share files). */
+function saveShareImage(imageBlob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(imageBlob);
+  a.download = uuidv4() + ".png";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 document.addEventListener("DOMContentLoaded", event => {
   const shareButton = document.getElementById("shareButton");
