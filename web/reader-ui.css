@@ -1763,6 +1763,29 @@ html.rui-chrome-hidden .rui-mini {
   background: var(--rui-accent);
 }
 
+/* ---------- Word helper (dotted harder words) ---------- */
+
+/* Original page: a layer of boxes under the text layer. */
+.rui-words {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rui-word-dot {
+  position: absolute;
+  box-sizing: border-box;
+  border-bottom: max(1.5px, 0.12em) dotted var(--rui-accent-ink);
+}
+
+/* "Fit to phone" text */
+.textView .rui-word {
+  text-decoration: underline dotted var(--rui-accent-ink);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
 /* ---------- Larger screens ---------- */
 
 @media (min-width: 900px) {

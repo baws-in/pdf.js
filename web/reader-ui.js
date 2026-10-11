@@ -551,7 +551,9 @@
           !start.secondTap &&
           !start.interactive
         ) {
-          scheduleTap();
+          if (!defineWordAt(t.clientX, t.clientY)) {
+            scheduleTap();
+          }
         }
       },
       { passive: true }
@@ -588,7 +590,9 @@
         !start.hadSelection &&
         !event.target.closest?.(INTERACTIVE)
       ) {
-        scheduleTap();
+        if (!defineWordAt(event.clientX, event.clientY)) {
+          scheduleTap();
+        }
       }
     });
   }
@@ -1294,7 +1298,24 @@
       return;
     }
     hideSelectionBar();
-    showDefinition(word, lookUp(word));
+    showDefinition(word, dottedWordMeaning(word) ?? lookUp(word));
+  }
+
+  /** The word helper's meaning for a word it dots in this book, if any. */
+  function dottedWordMeaning(word) {
+    const data = wordHelper.data;
+    if (!data) {
+      return undefined;
+    }
+    const wanted = word.toLowerCase();
+    const pages = [String(currentPage()), ...Object.keys(data.pages)];
+    for (const page of pages) {
+      const entry = data.pages[page]?.find(e => e[1].toLowerCase() === wanted);
+      if (entry) {
+        return data.defs?.[entry[0]];
+      }
+    }
+    return undefined;
   }
 
   async function copySelection() {
@@ -1954,10 +1975,238 @@
           )
         );
       }
+      if (wordHelper.url) {
+        toggles.append(
+          makeSwitch("Underline harder words", wordHelperOn(), setWordHelper)
+        );
+      }
 
       body.append(themeGroup, layoutGroup, sizeGroup, toggles);
       syncModes();
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Word helper: dotted underline under harder words, tap for the meaning
+  // ---------------------------------------------------------------------
+
+  // The app passes "words=<url>" (same origin) for books that have word
+  // data: {v: 1, pages: {"<page>": [[key, word, x, y, w, h, ...]]},
+  // defs: {key: meaning}}. Boxes are in 1/10000 of the page from its top
+  // left; a word broken over two lines has two boxes. The data is made
+  // ahead of time (baws-search scripts/book-words.mjs), so nothing is
+  // looked up while reading. Whether it's on is a per-device setting.
+  const wordHelper = {
+    url: wordsUrl(),
+    data: null,
+    loading: null,
+  };
+
+  function wordsUrl() {
+    try {
+      const value = new URLSearchParams(location.search).get("words");
+      const url = value && new URL(value, location.href);
+      return url?.origin === location.origin ? url.href : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function wordHelperOn() {
+    return !!wordHelper.url && storageGet("readerWordHelper") === "1";
+  }
+
+  function loadWords() {
+    wordHelper.loading ||= fetch(wordHelper.url)
+      .then(response => (response.ok ? response.json() : null))
+      .then(data => {
+        wordHelper.data = data?.v === 1 && data.pages ? data : null;
+        return wordHelper.data;
+      })
+      .catch(() => null);
+    return wordHelper.loading;
+  }
+
+  function wordsOnPage(pageNumber) {
+    return wordHelper.data?.pages[pageNumber] || [];
+  }
+
+  /** Dots under the words of one page (original page or "Fit to phone"). */
+  function decorateWordPage(pageNumber) {
+    const div = app()?.pdfViewer?.getPageView(pageNumber - 1)?.div;
+    if (!div || !wordHelperOn() || !wordHelper.data) {
+      return;
+    }
+    if (window.VIEW_MODE === "text") {
+      decorateTextView(div, wordsOnPage(pageNumber));
+      return;
+    }
+    div.querySelector(":scope > .rui-words")?.remove();
+    const entries = wordsOnPage(pageNumber);
+    if (!entries.length) {
+      return;
+    }
+    const layer = el("div", "rui-words", { "aria-hidden": "true" });
+    for (const [key, word, ...boxes] of entries) {
+      for (let i = 0; i + 3 < boxes.length; i += 4) {
+        const dot = el("span", "rui-word-dot");
+        dot.dataset.k = key;
+        dot.dataset.w = word;
+        dot.style.left = `${boxes[i] / 100}%`;
+        dot.style.top = `${boxes[i + 1] / 100}%`;
+        dot.style.width = `${boxes[i + 2] / 100}%`;
+        dot.style.height = `${boxes[i + 3] / 100}%`;
+        layer.append(dot);
+      }
+    }
+    // Under the text layer, so selecting text works as before.
+    const canvas = div.querySelector(":scope > .canvasWrapper");
+    if (canvas) {
+      canvas.after(layer);
+    } else {
+      div.prepend(layer);
+    }
+  }
+
+  /** "Fit to phone": wrap the page's words in the reflowed text. */
+  function decorateTextView(div, entries) {
+    const view = div.querySelector(".textView:not(.textViewUnavailable)");
+    if (!view || view.querySelector(".rui-word") || !entries.length) {
+      return;
+    }
+    const keyOf = new Map(entries.map(([key, word]) => [word, key]));
+    const escape = word => word.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(
+      `(?<![A-Za-z])(?:${[...keyOf.keys()]
+        .sort((a, b) => b.length - a.length)
+        .map(escape)
+        .join("|")})(?![A-Za-z])`,
+      "g"
+    );
+    const walker = document.createTreeWalker(view, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return node.parentElement.closest("a, code, .rui-word")
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const textNodes = [];
+    while (walker.nextNode()) {
+      textNodes.push(walker.currentNode);
+    }
+    // One underline per word per page, like the original page.
+    const done = new Set();
+    for (const node of textNodes) {
+      const text = node.data;
+      const parts = [];
+      let last = 0;
+      for (const match of text.matchAll(pattern)) {
+        const key = keyOf.get(match[0]);
+        if (done.has(key)) {
+          continue;
+        }
+        done.add(key);
+        parts.push(text.slice(last, match.index));
+        const word = el("span", "rui-word");
+        word.dataset.k = key;
+        word.dataset.w = match[0];
+        word.textContent = match[0];
+        parts.push(word);
+        last = match.index + match[0].length;
+      }
+      if (parts.length) {
+        parts.push(text.slice(last));
+        node.replaceWith(...parts.filter(part => part !== ""));
+      }
+    }
+  }
+
+  function decorateAllWordPages() {
+    const viewer = app()?.pdfViewer;
+    for (let i = 0; i < (viewer?.pagesCount || 0); i++) {
+      if (
+        viewer.getPageView(i)?.div?.querySelector(".canvasWrapper, .textView")
+      ) {
+        decorateWordPage(i + 1);
+      }
+    }
+  }
+
+  function removeWordDecorations() {
+    for (const layer of document.querySelectorAll(".rui-words")) {
+      layer.remove();
+    }
+    for (const word of document.querySelectorAll(".rui-word")) {
+      const parent = word.parentNode;
+      word.replaceWith(word.textContent);
+      parent.normalize();
+    }
+  }
+
+  async function setWordHelper(on) {
+    storageSet("readerWordHelper", on ? "1" : "0");
+    if (!on) {
+      removeWordDecorations();
+      return;
+    }
+    if (!(await loadWords())) {
+      toast("Word help isn't available for this book yet.");
+      return;
+    }
+    decorateAllWordPages();
+    toast("Tap an underlined word to see its meaning.");
+  }
+
+  /** The dotted word at a screen point, if any: {word, key}. */
+  function wordAt(x, y) {
+    if (!wordHelperOn() || !wordHelper.data) {
+      return null;
+    }
+    const target = document.elementFromPoint(x, y)?.closest?.(".rui-word");
+    if (target) {
+      return { word: target.dataset.w, key: target.dataset.k };
+    }
+    // Original page: the dots sit under the text layer, so test their boxes
+    // (a little taller than the text, for fingers).
+    for (const dot of document.querySelectorAll(".rui-word-dot")) {
+      const box = dot.getBoundingClientRect();
+      const slack = Math.max(4, box.height * 0.3);
+      if (
+        x >= box.left - 2 &&
+        x <= box.right + 2 &&
+        y >= box.top - slack &&
+        y <= box.bottom + slack
+      ) {
+        return { word: dot.dataset.w, key: dot.dataset.k };
+      }
+    }
+    return null;
+  }
+
+  /** Shows the meaning of a dotted word at (x, y); false if there's none. */
+  function defineWordAt(x, y) {
+    const hit = wordAt(x, y);
+    if (!hit) {
+      return false;
+    }
+    const word = /^[A-Z]+$/.test(hit.word) ? hit.word.toLowerCase() : hit.word;
+    showDefinition(word, wordHelper.data.defs?.[hit.key]);
+    return true;
+  }
+
+  function wireWordHelper() {
+    if (!wordHelper.url) {
+      return;
+    }
+    const bus = app().eventBus;
+    bus._on("pagerendered", e => {
+      if (wordHelperOn()) {
+        decorateWordPage(e.pageNumber);
+      }
+    });
+    if (wordHelperOn()) {
+      loadWords().then(decorateAllWordPages);
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -3085,6 +3334,7 @@
       wireSelectionBar(container);
       wirePlayer();
       wireNotebook();
+      wireWordHelper();
       a.eventBus._on("pagechanging", () => {
         hideSelectionBar();
         closeDefinition();
