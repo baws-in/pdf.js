@@ -1626,6 +1626,72 @@ function removeHighlight(id) {
   window.parent.postMessage({ type: "deleteHighlight", payload: id }, "*");
 }
 
+// "Save for later": a page the reader wants to come back to (often one a
+// friend's link opened). Saved pages travel with the highlights (same
+// messages; the app keeps them with the bookmarks) and are told apart by
+// `type`. One per page, with the passage that was selected, if any, so the
+// reader remembers why; `text` reads well wherever bookmarks are listed.
+const SAVED_PAGE_TYPE = "later";
+
+function isSavedPage(item) {
+  return item?.type === SAVED_PAGE_TYPE;
+}
+
+function savedPageId(urlData, pageNum) {
+  return [
+    SAVED_PAGE_TYPE,
+    urlData.bookParent,
+    urlData.language,
+    urlData.bookName,
+    pageNum,
+  ].join("_");
+}
+
+/** The saved entry for a page of this book, or null. */
+function findSavedPage(pageNum) {
+  const urlData = getBookUrlData();
+  if (!urlData) {
+    return null;
+  }
+  const id = savedPageId(urlData, pageNum);
+  return storedHighlights.find(h => h.id === id) || null;
+}
+
+/** Saves a page for later, or updates its passage; tells the app. */
+function savePage(pageNum, { chapter = "", passage = "" } = {}) {
+  const urlData = getBookUrlData();
+  if (!urlData) {
+    return null;
+  }
+  const where = [chapter, `page ${pageNum}`].filter(Boolean).join(" · ");
+  const entry = {
+    id: savedPageId(urlData, pageNum),
+    type: SAVED_PAGE_TYPE,
+    rects: [],
+    url:
+      (window.location.hostname === "localhost"
+        ? ""
+        : window.location.hostname) +
+      `/books/${urlData.bookParent}/${urlData.language}/${urlData.bookName}/pdf/${pageNum}`,
+    text: passage || `Saved for later · ${where}`,
+    chapter,
+    pageNo: pageNum,
+    context: [],
+    title: urlData.bookName,
+    baseUrl: PDFViewerApplication.baseUrl,
+    shared: false,
+  };
+  const index = storedHighlights.findIndex(h => h.id === entry.id);
+  if (index > -1) {
+    storedHighlights.splice(index, 1, entry);
+  } else {
+    storedHighlights.push(entry);
+  }
+  notifyHighlightsChanged();
+  window.parent.postMessage({ type: "saveHighlight", payload: entry }, "*");
+  return entry;
+}
+
 function highlightColorOf(highlight) {
   return HIGHLIGHT_COLORS.includes(highlight?.color)
     ? highlight.color

@@ -675,6 +675,11 @@ html.rui-chrome-hidden .rui-bottom {
   color: var(--rui-accent-ink) !important;
 }
 
+/* Save: a filled bookmark when this page is saved for later. */
+#ruiSavePage[aria-pressed="true"] svg path {
+  fill: currentColor;
+}
+
 /* ---------- Sheets ---------- */
 
 .rui-scrim {
@@ -1710,8 +1715,13 @@ html.rui-chrome-hidden .rui-mini {
 .rui-card-yellow,
 .rui-card-blue,
 .rui-card-green,
-.rui-card-pink {
+.rui-card-pink,
+.rui-card-saved {
   box-shadow: inset 4px 0 0 var(--rui-card-mark);
+}
+
+.rui-card-saved {
+  --rui-card-mark: var(--rui-accent);
 }
 
 .rui-card-yellow {

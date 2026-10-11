@@ -608,7 +608,9 @@
   }
 
   function currentPage() {
-    return app()?.page || 1;
+    // pdf.js's `page` getter throws until its viewer exists.
+    const a = app();
+    return (a?.pdfViewer && a.page) || 1;
   }
 
   function outline() {
@@ -2210,6 +2212,107 @@
   }
 
   // ---------------------------------------------------------------------
+  // Save for later
+  // ---------------------------------------------------------------------
+
+  // The dock's Save keeps this page (with the selected passage, if any) for
+  // later; the app lists saved pages on its home page and with bookmarks.
+  // Saving needs no account: the app keeps them on the device until the
+  // reader signs in. See window.savePage in viewer-flexi.js.
+
+  const SAVE_NUDGE_MS = 40000;
+
+  function chapterTitle(page) {
+    return cleanTitle(outlinePath(page).at(-1)?.title) || bookLabel();
+  }
+
+  function selectedPassage() {
+    restoreSelection();
+    return selectionRangeInBook() ? selectedText() : "";
+  }
+
+  /** Puts a saved entry back exactly as it was (for Undo). */
+  function restoreSavedPage(entry) {
+    window.parent.postMessage({ type: "saveHighlight", payload: entry }, "*");
+    window.addHighlights?.([entry]);
+  }
+
+  function toggleSavedPage() {
+    const page = currentPage();
+    const before = window.findSavedPage?.(page);
+    const passage = selectedPassage();
+    if (before && !passage) {
+      window.removeHighlight?.(before.id);
+      toast("Removed from Saved for later.", {
+        actionLabel: "Undo",
+        timeout: 6000,
+        onAction: () => restoreSavedPage(before),
+      });
+    } else {
+      const saved = window.savePage?.(page, {
+        chapter: chapterTitle(page),
+        passage,
+      });
+      if (!saved) {
+        toast("This page can't be saved.");
+        return;
+      }
+      hideSelectionBar();
+      window.getSelection()?.removeAllRanges();
+      toast(
+        before
+          ? "Saved passage updated."
+          : "Saved for later. You'll find it on the home page.",
+        {
+          actionLabel: "Undo",
+          timeout: 6000,
+          onAction: () => {
+            window.removeHighlight?.(saved.id);
+            if (before) {
+              restoreSavedPage(before);
+            }
+          },
+        }
+      );
+    }
+    refreshPressedStates();
+  }
+
+  /**
+   * Someone who opened the reader from a link (the first book opened in
+   * this tab) and is still on that page after a while may be short on
+   * time: suggest saving it, once.
+   */
+  function wireSaveNudge() {
+    let firstOpen = false;
+    try {
+      firstOpen = !sessionStorage.getItem("ruiOpened");
+      sessionStorage.setItem("ruiOpened", "1");
+    } catch {
+      return;
+    }
+    if (!firstOpen) {
+      return;
+    }
+    const startPage = currentPage();
+    setTimeout(() => {
+      if (
+        currentPage() !== startPage ||
+        document.hidden ||
+        sheetOpen ||
+        window.findSavedPage?.(startPage)
+      ) {
+        return;
+      }
+      toast("Short on time? Save this page and come back to it later.", {
+        actionLabel: "Save",
+        timeout: 9000,
+        onAction: toggleSavedPage,
+      });
+    }, SAVE_NUDGE_MS);
+  }
+
+  // ---------------------------------------------------------------------
   // Notebook: Contents, Highlights, Notes (BAWS.in Team), Words
   // ---------------------------------------------------------------------
 
@@ -2248,12 +2351,27 @@
     return !!path && typeof item?.url === "string" && item.url.includes(path);
   }
 
-  function bookHighlights() {
-    // `storedHighlights` is a top-level `let` in viewer-flexi.js.
+  function storedItems() {
+    // `storedHighlights` is a top-level `let` in viewer-flexi.js; it also
+    // holds the pages saved for later (type "later").
     // eslint-disable-next-line no-undef
-    const all = typeof storedHighlights !== "undefined" ? storedHighlights : [];
-    return all
-      .filter(inThisBook)
+    return typeof storedHighlights !== "undefined" ? storedHighlights : [];
+  }
+
+  function isSavedPage(item) {
+    return item?.type === "later";
+  }
+
+  /** Pages of this book saved for later, in page order. */
+  function bookSavedPages() {
+    return storedItems()
+      .filter(item => isSavedPage(item) && inThisBook(item))
+      .sort((a, b) => a.pageNo - b.pageNo);
+  }
+
+  function bookHighlights() {
+    return storedItems()
+      .filter(item => !isSavedPage(item) && inThisBook(item))
       .sort(
         (a, b) =>
           a.pageNo - b.pageNo ||
@@ -2539,7 +2657,65 @@
 
   // --- Highlights ---
 
+  function renderSavedPages(panel) {
+    const saved = bookSavedPages();
+    if (!saved.length) {
+      return;
+    }
+    const list = el("div", "rui-cards rui-saved-pages");
+    for (const entry of saved) {
+      const card = el("article", "rui-card rui-card-saved");
+      const open = el("button", "rui-card-main", { type: "button" });
+      const meta = el("span", "rui-card-meta");
+      meta.textContent = [entry.chapter, `Page ${entry.pageNo}`]
+        .filter(Boolean)
+        .join(" · ");
+      const quote = el("span", "rui-card-quote");
+      quote.textContent = (entry.text || "").startsWith("Saved for later · ")
+        ? "Saved for later"
+        : entry.text;
+      open.append(meta, quote);
+      open.addEventListener("click", () => {
+        goToPage(entry.pageNo);
+        closeSheet();
+      });
+      const remove = el("button", "rui-icon-btn rui-card-action", {
+        type: "button",
+        "aria-label": "Remove from Saved for later",
+        title: "Remove from Saved for later",
+      });
+      // Static markup (icons and fixed labels only).
+      // eslint-disable-next-line no-unsanitized/property
+      remove.innerHTML = icon("trash");
+      remove.addEventListener("click", () => {
+        window.removeHighlight?.(entry.id);
+        refreshPressedStates();
+        panel.replaceChildren();
+        renderHighlights(panel);
+        toast("Removed from Saved for later.", {
+          actionLabel: "Undo",
+          timeout: 6000,
+          onAction: () => {
+            restoreSavedPage(entry);
+            refreshPressedStates();
+            if (panel.isConnected) {
+              panel.replaceChildren();
+              renderHighlights(panel);
+            }
+          },
+        });
+      });
+      card.append(open, remove);
+      list.append(card);
+    }
+    panel.append(sectionTitle("Saved for later"), list);
+  }
+
   function renderHighlights(panel) {
+    renderSavedPages(panel);
+    if (bookSavedPages().length) {
+      panel.append(sectionTitle("Highlights"));
+    }
     const all = bookHighlights();
     if (!all.length) {
       emptyState(
@@ -3098,14 +3274,17 @@
       pressed: () => !!window.audioMeta?.isSpeaking,
       run: openPlayerSheet,
     });
+    // Highlighting is in the selection bar; the dock saves the page for
+    // later instead (with the selected passage, if any).
     registerAction({
-      id: "highlight",
-      label: "Highlight",
-      icon: "highlight",
+      id: "savePage",
+      label: "Save",
+      icon: "bookmark",
       placements: ["dock"],
       priority: 30,
-      elementId: "bookMark",
-      run: () => highlightSelection(lastHighlightColor()),
+      elementId: "ruiSavePage",
+      pressed: () => !!window.findSavedPage?.(currentPage()),
+      run: toggleSavedPage,
     });
     registerAction({
       id: "share",
@@ -3344,6 +3523,11 @@
       wirePlayer();
       wireNotebook();
       wireWordHelper();
+      wireSaveNudge();
+      // Save shows whether this page is saved (pages change; the app sends
+      // the saved list with the highlights).
+      a.eventBus._on("pagechanging", refreshPressedStates);
+      document.addEventListener("baws:highlightschange", refreshPressedStates);
       a.eventBus._on("pagechanging", () => {
         hideSelectionBar();
         closeDefinition();
