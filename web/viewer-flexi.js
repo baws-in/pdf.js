@@ -11,6 +11,8 @@ const switchMode = mode => {
     switchButton.innerHTML = "&#x1F4BB;&#x1F449;&#x1F4F1;"; // Laptop to Mobile icon
   }
   window.VIEW_MODE = mode;
+  // Lets the CSS lay out "Fit to phone" as a reading column.
+  document.documentElement.classList.toggle("text-mode", mode === "text");
   //PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width';
   PDFViewerApplication.pdfViewer.refresh();
 };

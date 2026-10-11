@@ -901,6 +901,11 @@ class PDFPageView {
   
                       resizeObserver.observe(PDFViewerApplication.pdfViewer.viewer.lastChild);
                       PDFViewerApplication.pdfViewer.viewer.lastChild.style.width = "100%";
+                      // This page may be one being prepared ahead (the next
+                      // page), not the one on screen: give it the screen
+                      // width now, or it shows at the page's width and then
+                      // jumps when it's resized after a page turn.
+                      div.style.width = "100%";
                   } else {
                       if(div.innerHTML == '')
                         div.append(contentDiv);

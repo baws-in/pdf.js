@@ -129,6 +129,143 @@ html.rui .pdfViewer .textView {
   font-size: calc(17px * var(--rui-text-scale, 1));
 }
 
+/* "Fit to phone" as a reading column: the same width on every page, as tall
+   as its text. pdf.js sizes pages from the PDF page (and resizes them while
+   preparing the next one), which made the text jump between widths. */
+html.rui.text-mode .pdfViewer {
+  width: auto !important;
+}
+
+html.rui.text-mode #viewer {
+  padding-top: 0;
+}
+
+/* The room for the top bar is inside the page: pdf.js scrolls a new page's
+   top to the top of the window, which then shows the start of its text. */
+html.rui.text-mode .pdfViewer .page {
+  box-sizing: border-box;
+  width: min(100% - 32px, 760px) !important;
+  height: auto !important;
+  margin: 0 auto 16px !important;
+  padding-top: calc(var(--rui-top-h) + 12px);
+  border: 0 !important;
+  border-image: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html.rui.text-mode .pdfViewer .textView {
+  box-sizing: border-box;
+  max-width: none;
+  min-height: calc(100vh - var(--rui-top-h) - var(--rui-bottom-h) - 52px);
+  margin: 0;
+  padding: 44px 56px 52px;
+  border: 1px solid var(--rui-line);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 8px 24px rgb(0 0 0 / 0.06);
+  line-height: 1.7;
+  text-align: justify;
+  overflow-wrap: break-word;
+}
+
+html.rui.text-mode .textView > :first-child {
+  margin-top: 0;
+}
+
+html.rui.text-mode .textView :is(p, ul, ol, blockquote, table, pre) {
+  margin: 0 0 0.9em;
+}
+
+html.rui.text-mode .textView :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.4em 0 0.6em;
+  line-height: 1.3;
+  text-align: start;
+  hyphens: manual;
+}
+
+html.rui.text-mode .textView h1 {
+  font-size: 1.5em;
+}
+
+html.rui.text-mode .textView h2 {
+  font-size: 1.3em;
+}
+
+html.rui.text-mode .textView h3 {
+  font-size: 1.15em;
+}
+
+html.rui.text-mode .textView :is(h4, h5, h6) {
+  font-size: 1em;
+}
+
+html.rui.text-mode .textView :is(ul, ol) {
+  padding-inline-start: 1.4em;
+}
+
+html.rui.text-mode .textView blockquote {
+  padding-inline-start: 1em;
+  border-inline-start: 3px solid var(--rui-line);
+}
+
+html.rui.text-mode .textView hr {
+  margin: 1.5em 0;
+  border: 0;
+  border-top: 1px solid var(--rui-line);
+}
+
+html.rui.text-mode .textView table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  text-align: start;
+}
+
+html.rui.text-mode .textView :is(td, th) {
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--rui-line);
+}
+
+html.rui.text-mode .textView img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* The printed page number at the top of a page (see reader-ui.js). */
+html.rui.text-mode .textView .rui-page-label {
+  margin: 0 0 1.6em;
+  color: var(--rui-muted);
+  font: 600 0.75em/1 var(--rui-font);
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+html.rui.text-mode .pdfViewer .textView.textViewUnavailable {
+  text-align: center;
+}
+
+@media (max-width: 599px) {
+  html.rui.text-mode .pdfViewer .page {
+    width: 100% !important;
+    margin: 0 auto !important;
+    padding-top: var(--rui-top-h);
+  }
+
+  html.rui.text-mode .pdfViewer .textView {
+    min-height: calc(100vh - var(--rui-top-h) - var(--rui-bottom-h) - 24px);
+    padding: 24px 20px 36px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    /* Justified text in a narrow column leaves wide gaps between words. */
+    text-align: start;
+  }
+}
+
 /* ---------- Replace the old chrome ---------- */
 
 html.rui .toolbar,

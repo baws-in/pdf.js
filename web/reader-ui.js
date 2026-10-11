@@ -3320,9 +3320,18 @@
           timeout: 8000,
         });
       });
-      a.eventBus._on("pagerendered", () => {
+      a.eventBus._on("pagerendered", e => {
         if (window.VIEW_MODE !== "text") {
           textNoticeShown = false;
+          return;
+        }
+        // The text pages start with the printed page number ("**12**"):
+        // show it as a small label, not as a paragraph of the text.
+        const first = a.pdfViewer
+          .getPageView(e.pageNumber - 1)
+          ?.div.querySelector(".textView > p:first-child");
+        if (first && /^\s*\d{1,4}\s*$/.test(first.textContent)) {
+          first.classList.add("rui-page-label");
         }
       });
       updatePageUI();
