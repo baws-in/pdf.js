@@ -80,8 +80,10 @@ function getArrayBuffer(val) {
  */
 const ChunkCache = {
   NAME: "chunkCache",
-  // Total size kept across all books; the oldest entries are evicted first.
-  MAX_BYTES: 50 * 1024 * 1024,
+  // Total size kept across all books, and at most a quarter of the space the
+  // browser allows this site; the oldest entries are evicted first.
+  MAX_BYTES: 500 * 1024 * 1024,
+  MAX_SHARE_OF_QUOTA: 0.25,
   // Delay before cleanup so it doesn't compete with loading the first pages.
   MAINTENANCE_DELAY: 10000,
 
@@ -94,9 +96,12 @@ const ChunkCache = {
       this._cachePromise = (async () => {
         try {
           // Not available on insecure (http://) pages or in some private modes.
-          return globalThis.caches
-            ? await globalThis.caches.open(this.NAME)
-            : null;
+          if (!globalThis.caches) {
+            return null;
+          }
+          const cache = await globalThis.caches.open(this.NAME);
+          this._askToKeep();
+          return cache;
         } catch (ex) {
           warn(`ChunkCache: unable to open the cache: ${ex}`);
           return null;
@@ -104,6 +109,33 @@ const ChunkCache = {
       })();
     }
     return this._cachePromise;
+  },
+
+  /**
+   * Asks the browser to keep this site's storage when the device runs low on
+   * space (persistent storage). Chrome decides without asking the user;
+   * Firefox would show a prompt, so it isn't asked there.
+   */
+  _askToKeep() {
+    const storage = globalThis.navigator?.storage;
+    if (!storage?.persist || /Firefox\//.test(navigator.userAgent)) {
+      return;
+    }
+    storage
+      .persisted()
+      .then(persisted => persisted || storage.persist())
+      .catch(() => {});
+  },
+
+  /** MAX_BYTES, or less when the browser allows this site little space. */
+  async _limit() {
+    try {
+      const { quota } = await globalThis.navigator.storage.estimate();
+      if (quota > 0) {
+        return Math.min(this.MAX_BYTES, quota * this.MAX_SHARE_OF_QUOTA);
+      }
+    } catch {}
+    return this.MAX_BYTES;
   },
 
   docKey(url) {
@@ -186,7 +218,7 @@ const ChunkCache = {
 
   /**
    * Deletes chunks of other versions of this file and keeps the cache under
-   * MAX_BYTES by evicting the oldest entries (insertion order).
+   * its limit by evicting the oldest entries (insertion order).
    */
   scheduleMaintenance(cache, docKey, version) {
     clearTimeout(this._maintenanceTimer);
@@ -220,11 +252,12 @@ const ChunkCache = {
       entries.push({ request, size, isCurrentDoc });
     }
 
+    const limit = await this._limit();
     let total = entries.reduce((sum, e) => sum + e.size, 0);
     // Evict other books first (oldest first), then this one if still needed.
     for (const pass of [false, true]) {
       for (const entry of entries) {
-        if (total <= this.MAX_BYTES) {
+        if (total <= limit) {
           return;
         }
         if (entry.isCurrentDoc === pass && entry.size > 0) {
