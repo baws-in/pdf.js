@@ -119,6 +119,8 @@ class PDFPageView {
 
   #previousRotation = null;
 
+  #previousMode = null;
+
   #renderError = null;
 
   #renderingState = RenderingStates.INITIAL;
@@ -268,10 +270,16 @@ class PDFPageView {
   #setDimensions() {
     const { viewport } = this;
     if (this.pdfPage) {
-      if (this.#previousRotation === viewport.rotation) {
+      // Also when the mode changed: "Fit to phone" sizes the page to 100%,
+      // and the original page needs its own size back (else it's cut off).
+      if (
+        this.#previousRotation === viewport.rotation &&
+        this.#previousMode === window.VIEW_MODE
+      ) {
         return;
       }
       this.#previousRotation = viewport.rotation;
+      this.#previousMode = window.VIEW_MODE;
     }
 
     setLayerDimensions(
