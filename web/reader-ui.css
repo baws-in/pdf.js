@@ -521,6 +521,15 @@ html.rui-chrome-hidden .rui-bottom {
   pointer-events: none;
 }
 
+/* A bar that hardly covers the page stays when the controls hide
+   (setChromeHidden in reader-ui.js). */
+html.rui-chrome-hidden.rui-keep-top .rui-top,
+html.rui-chrome-hidden.rui-keep-bottom .rui-bottom {
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rui-top,
   .rui-bottom,
@@ -1238,7 +1247,7 @@ html.rui #voicePanel {
   display: none;
 }
 
-html.rui-chrome-hidden .rui-mini {
+html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 

@@ -358,14 +358,68 @@
   let chromeHidden = false;
   let suppressScrollUntil = 0;
 
-  function setChromeHidden(hidden) {
+  // A bar hides only when it covers at least this share of the page on
+  // screen: hiding a bar that covers nothing just shows empty background
+  // where it was (e.g. the top bar above a page that fits the screen).
+  const HIDE_MIN_COVER = 0.02;
+
+  /**
+   * Shares (0-1) of the page area on screen covered by the top bar and by the
+   * bottom panel. Measured from their heights, so it's the same whether they
+   * are shown or hidden.
+   */
+  function controlsCoverPage() {
+    const view = app()?.pdfViewer?.getPageView(currentPage() - 1);
+    const page = view?.div.querySelector(".canvasWrapper") || view?.div;
+    if (!page) {
+      return { top: 1, bottom: 1 };
+    }
+    const rect = page.getBoundingClientRect();
+    const top = Math.max(rect.top, 0);
+    const bottom = Math.min(rect.bottom, window.innerHeight);
+    if (bottom <= top) {
+      return { top: 1, bottom: 1 };
+    }
+    const height = bottom - top;
+    const topBarEnd = ui.top.offsetHeight;
+    const bottomBarStart = window.innerHeight - ui.bottom.offsetHeight;
+    return {
+      top: Math.max(0, Math.min(topBarEnd, bottom) - top) / height,
+      bottom: Math.max(0, bottom - Math.max(bottomBarStart, top)) / height,
+    };
+  }
+
+  /**
+   * @param {boolean} hidden
+   * @param {Object} [options]
+   * @param {boolean} [options.auto] - hidden by the reader (swiping,
+   *   scrolling), not by a tap: nothing hides when neither bar covers the
+   *   page. A tap then still hides both, so it never seems to do nothing.
+   */
+  function setChromeHidden(hidden, { auto = false } = {}) {
     if (hidden && (sheetOpen || hasSelection())) {
       return;
     }
+    let keepTop = false;
+    let keepBottom = false;
+    if (hidden) {
+      const cover = controlsCoverPage();
+      keepTop = cover.top < HIDE_MIN_COVER;
+      keepBottom = cover.bottom < HIDE_MIN_COVER;
+      if (keepTop && keepBottom) {
+        if (auto) {
+          return;
+        }
+        keepTop = keepBottom = false;
+      }
+    }
     chromeHidden = hidden;
-    document.documentElement.classList.toggle("rui-chrome-hidden", hidden);
-    ui.top.inert = hidden;
-    ui.bottom.inert = hidden;
+    const root = document.documentElement;
+    root.classList.toggle("rui-chrome-hidden", hidden);
+    root.classList.toggle("rui-keep-top", keepTop);
+    root.classList.toggle("rui-keep-bottom", keepBottom);
+    ui.top.inert = hidden && !keepTop;
+    ui.bottom.inert = hidden && !keepBottom;
   }
 
   function toggleChrome() {
@@ -404,7 +458,7 @@
             return;
           }
           if (delta > 0 && top > 80) {
-            setChromeHidden(true);
+            setChromeHidden(true, { auto: true });
           } else if (delta < 0) {
             setChromeHidden(false);
           }
@@ -536,10 +590,10 @@
           // Swiping through pages is reading: get the controls out of the way.
           if (dx < 0 && atRight) {
             navigate("next");
-            setChromeHidden(true);
+            setChromeHidden(true, { auto: true });
           } else if (dx > 0 && atLeft) {
             navigate("prev");
-            setChromeHidden(true);
+            setChromeHidden(true, { auto: true });
           }
           return;
         }
