@@ -468,6 +468,26 @@
     );
   }
 
+  /** With a mouse, reaching the top or bottom edge brings the controls back. */
+  function wireMouseEdges() {
+    if (!matchMedia("(pointer: fine)").matches) {
+      return;
+    }
+    const EDGE = 6;
+    document.addEventListener(
+      "mousemove",
+      event => {
+        if (
+          chromeHidden &&
+          (event.clientY <= EDGE || event.clientY >= window.innerHeight - EDGE)
+        ) {
+          setChromeHidden(false);
+        }
+      },
+      { passive: true }
+    );
+  }
+
   const INTERACTIVE =
     "a, button, input, select, textarea, label, [contenteditable], " +
     ".highlight-group, .delete-highlight-btn, .annotationLayer section, " +
@@ -2523,39 +2543,191 @@
 
   function openNotebook(tab = notebook.tab) {
     notebook.tab = tab;
-    openSheet("Notebook", body => {
-      body.classList.add("rui-notebook");
-      const tabs = el("div", "rui-tabs", {
-        role: "tablist",
-        "aria-label": "Notebook",
-      });
-      const panel = el("div", "rui-tabpanel", { role: "tabpanel" });
-      const buttons = NOTEBOOK_TABS.map(({ id, label }) => {
-        const button = el("button", "rui-tab", { type: "button", role: "tab" });
-        button.textContent = label;
-        const count = tabCount(id);
-        if (count) {
-          const badge = el("span", "rui-tab-count");
-          badge.textContent = String(count);
-          button.append(badge);
-        }
-        button.addEventListener("click", () => {
-          notebook.tab = id;
-          select();
-        });
-        tabs.append(button);
-        return { id, button };
-      });
-      const select = () => {
-        for (const { id, button } of buttons) {
-          button.setAttribute("aria-selected", String(id === notebook.tab));
-        }
-        panel.replaceChildren();
-        RENDER_TAB[notebook.tab](panel);
-      };
-      body.append(tabs, panel);
-      select();
+    if (panelAllowed()) {
+      openPanel(tab);
+      return;
+    }
+    openSheet("Notebook", buildNotebook);
+  }
+
+  /** The Notebook's tabs and the selected tab's list (sheet or panel). */
+  function buildNotebook(body) {
+    body.classList.add("rui-notebook");
+    const tabs = el("div", "rui-tabs", {
+      role: "tablist",
+      "aria-label": "Notebook",
     });
+    const tabPanel = el("div", "rui-tabpanel", { role: "tabpanel" });
+    const buttons = NOTEBOOK_TABS.map(({ id, label }) => {
+      const button = el("button", "rui-tab", { type: "button", role: "tab" });
+      button.textContent = label;
+      const count = tabCount(id);
+      if (count) {
+        const badge = el("span", "rui-tab-count");
+        badge.textContent = String(count);
+        button.append(badge);
+      }
+      button.addEventListener("click", () => {
+        notebook.tab = id;
+        select();
+      });
+      tabs.append(button);
+      return { id, button };
+    });
+    const select = () => {
+      for (const { id, button } of buttons) {
+        button.setAttribute("aria-selected", String(id === notebook.tab));
+      }
+      tabPanel.replaceChildren();
+      RENDER_TAB[notebook.tab](tabPanel);
+    };
+    body.append(tabs, tabPanel);
+    select();
+  }
+
+  // --- The side panel (wide screens) ---
+  //
+  // On wide screens the Notebook sits in the left margin instead of a sheet
+  // over the page. The page never moves: it stays centred. The panel opens
+  // by itself when it fits in the margin without covering the page and then
+  // stays while reading; ✕ or the Contents button closes it (remembered on
+  // this device). When it would cover the page (narrow window, zoomed in) it
+  // floats over the page's edge and hides with the top and bottom bars while
+  // reading.
+
+  const PANEL_WIDTH = 340;
+  // Narrower windows get the bottom sheet, as on phones.
+  const PANEL_MIN_WINDOW = 900;
+  const sidePanel = { el: null, body: null, open: false, chapter: null };
+
+  function panelAllowed() {
+    return window.innerWidth >= PANEL_MIN_WINDOW;
+  }
+
+  /** True when the panel fits beside the page without covering it. */
+  function panelFits() {
+    const view = app()?.pdfViewer?.getPageView(currentPage() - 1);
+    if (!view) {
+      return false;
+    }
+    return view.div.getBoundingClientRect().left >= PANEL_WIDTH + 8;
+  }
+
+  function buildPanel() {
+    sidePanel.el = el("aside", "rui-panel", { "aria-label": "Notebook" });
+    const close = el("button", "rui-icon-btn rui-panel-close", {
+      type: "button",
+      "aria-label": "Close the Notebook",
+      title: "Close",
+    });
+    // Static markup (icon only).
+    // eslint-disable-next-line no-unsanitized/property
+    close.innerHTML = icon("close");
+    close.addEventListener("click", () => closePanel());
+    sidePanel.body = el("div", "rui-panel-body");
+    sidePanel.el.append(close, sidePanel.body);
+    sidePanel.el.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        closePanel();
+      }
+    });
+    (document.getElementById("outerContainer") || document.body).append(
+      sidePanel.el
+    );
+  }
+
+  function openPanel(tab = notebook.tab) {
+    notebook.tab = tab;
+    if (!sidePanel.el) {
+      buildPanel();
+    }
+    storageSet("ruiPanel", "open");
+    sidePanel.open = true;
+    renderPanel();
+    placePanel();
+    refreshPressedStates();
+  }
+
+  /** Closes the panel; it stays closed (on this device) until reopened. */
+  function closePanel() {
+    storageSet("ruiPanel", "closed");
+    sidePanel.open = false;
+    placePanel();
+    refreshPressedStates();
+  }
+
+  function renderPanel({ keepScroll = false } = {}) {
+    if (!sidePanel.open) {
+      return;
+    }
+    const scrollTop = sidePanel.body.scrollTop;
+    sidePanel.body.replaceChildren();
+    buildNotebook(sidePanel.body);
+    if (keepScroll) {
+      sidePanel.body.scrollTop = scrollTop;
+    }
+    sidePanel.chapter = outlinePath(currentPage()).at(-1) || null;
+  }
+
+  /**
+   * Shows the panel where it belongs: in the margin, over the page's edge
+   * ("rui-panel-over") when the margin is too narrow, or not at all in a
+   * narrow window. Opens it by itself when it fits and wasn't closed.
+   */
+  function placePanel() {
+    const root = document.documentElement;
+    if (
+      !sidePanel.open &&
+      panelAllowed() &&
+      storageGet("ruiPanel") !== "closed" &&
+      panelFits()
+    ) {
+      openPanel(notebook.tab);
+      return;
+    }
+    const shown = sidePanel.open && panelAllowed();
+    root.classList.toggle("rui-panel-open", shown);
+    root.classList.toggle("rui-panel-over", shown && !panelFits());
+  }
+
+  /** Keeps the open panel current without fighting the reader's scrolling. */
+  function refreshPanel(reason) {
+    if (!sidePanel.open) {
+      return;
+    }
+    // Don't redraw under someone typing in the chapter filter.
+    if (sidePanel.el.contains(document.activeElement)) {
+      if (document.activeElement.tagName === "INPUT") {
+        return;
+      }
+    }
+    if (reason === "page") {
+      const chapter = outlinePath(currentPage()).at(-1) || null;
+      const redraw =
+        (notebook.tab === "contents" && chapter !== sidePanel.chapter) ||
+        (notebook.tab === "notes" && notebook.noteScope === "page");
+      if (!redraw) {
+        return;
+      }
+    }
+    renderPanel({ keepScroll: reason !== "page" });
+  }
+
+  function wirePanel(a) {
+    let timer = null;
+    const place = () => {
+      clearTimeout(timer);
+      timer = setTimeout(placePanel, 60);
+    };
+    a.eventBus._on("updateviewarea", place);
+    a.eventBus._on("pagerendered", place);
+    window.addEventListener("resize", place);
+    a.eventBus._on("pagechanging", () => refreshPanel("page"));
+    document.addEventListener("baws:highlightschange", () =>
+      refreshPanel("data")
+    );
+    placePanel();
   }
 
   function tabCount(id) {
@@ -3230,6 +3402,7 @@
     renderAllNoteMarkers();
     renderSliderMarks();
     maybeToastNotes();
+    refreshPanel("data");
   }
 
   function wireNotebook() {
@@ -3316,7 +3489,15 @@
       placements: ["dock"],
       priority: 50,
       elementId: "ruiContents",
-      run: () => openNotebook("contents"),
+      // On wide screens it opens and closes the side panel.
+      pressed: () => sidePanel.open && panelAllowed(),
+      run: () => {
+        if (sidePanel.open && panelAllowed() && notebook.tab === "contents") {
+          closePanel();
+        } else {
+          openNotebook("contents");
+        }
+      },
     });
     registerAction({
       id: "listen",
@@ -3576,6 +3757,8 @@
       wireSelectionBar(container);
       wirePlayer();
       wireNotebook();
+      wirePanel(a);
+      wireMouseEdges();
       wireWordHelper();
       wireSaveNudge();
       // Save shows whether this page is saved (pages change; the app sends

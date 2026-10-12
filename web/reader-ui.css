@@ -309,6 +309,7 @@ html.rui .findbar {
 .rui-top,
 .rui-bottom,
 .rui-sheet,
+.rui-panel,
 .rui-toast {
   font-family: var(--rui-font);
   color: var(--rui-ink);
@@ -317,7 +318,8 @@ html.rui .findbar {
 
 .rui-top button,
 .rui-bottom button,
-.rui-sheet button {
+.rui-sheet button,
+.rui-panel button {
   font: inherit;
   color: inherit;
   background: none;
@@ -332,6 +334,8 @@ html.rui .findbar {
 .rui-bottom button:focus-visible,
 .rui-sheet button:focus-visible,
 .rui-sheet input:focus-visible,
+.rui-panel button:focus-visible,
+.rui-panel input:focus-visible,
 .rui-scrub-range:focus-visible {
   outline: 2px solid var(--rui-accent);
   outline-offset: 2px;
@@ -1963,6 +1967,73 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   .rui-dock {
     width: auto;
     grid-template-columns: repeat(var(--rui-dock-count, 5), 76px);
+  }
+
+  /* Slider and dock in one centred row, at most about 1100px wide. */
+  .rui-bottom {
+    padding-inline: max(16px, calc((100% - 1100px) / 2));
+  }
+
+  /* ---------- Notebook side panel (reader-ui.js: placePanel) ---------- */
+
+  .rui-panel {
+    position: fixed;
+    left: 0;
+    top: var(--rui-top-h);
+    bottom: var(--rui-bottom-h);
+    width: 340px;
+    display: none;
+    flex-direction: column;
+    background: var(--rui-surface-solid);
+    border-right: 1px solid var(--rui-line);
+    z-index: 990;
+    transition:
+      top 0.22s ease,
+      bottom 0.22s ease,
+      transform 0.22s ease,
+      opacity 0.22s ease;
+  }
+
+  html.rui-panel-open .rui-panel {
+    display: flex;
+  }
+
+  /* Over the page's edge: a shadow sets it apart from the page. */
+  html.rui-panel-over .rui-panel {
+    box-shadow: 6px 0 18px rgb(0 0 0 / 0.12);
+  }
+
+  /* Full height when the bars are hidden. */
+  html.rui-chrome-hidden:not(.rui-keep-top) .rui-panel {
+    top: 0;
+  }
+
+  html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-panel {
+    bottom: 0;
+  }
+
+  /* Covering the page: out of the way while reading. */
+  html.rui-chrome-hidden.rui-panel-over .rui-panel {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .rui-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 16px 16px;
+  }
+
+  .rui-panel-close {
+    position: absolute;
+    top: 10px;
+    right: 8px;
+    z-index: 2;
+  }
+
+  .rui-panel .rui-tabs {
+    padding-right: 40px;
   }
 
   .rui-sheet {
