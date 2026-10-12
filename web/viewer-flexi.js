@@ -121,6 +121,41 @@ onDomReady(function () {
     }
   });
 
+  // A page whose part of the PDF couldn't be downloaded (offline, or the
+  // connection dropped) is drawn as a black box and never again. Instead it
+  // gets a message, and is drawn again once when the connection comes back
+  // or when the reader returns to it. Not retried on its own: pdf.js would
+  // pick the same page again straight away, in a loop.
+  function watchUnavailablePages() {
+    const app = PDFViewerApplication;
+    const unavailable = new Set();
+
+    const retry = pageNumber => {
+      const view = app.pdfViewer.getPageView(pageNumber - 1);
+      unavailable.delete(pageNumber);
+      view?.div.classList.remove("page-unavailable");
+      view?.reset();
+      app.pdfViewer.update();
+    };
+
+    app.eventBus._on("pagerendered", ({ pageNumber, error, source }) => {
+      if (error) {
+        unavailable.add(pageNumber);
+        source.div.classList.add("page-unavailable");
+      }
+    });
+    app.eventBus._on("pagechanging", ({ pageNumber }) => {
+      if (unavailable.has(pageNumber)) {
+        retry(pageNumber);
+      }
+    });
+    window.addEventListener("online", () => {
+      for (const pageNumber of unavailable) {
+        retry(pageNumber);
+      }
+    });
+  }
+
   let scondsCount = 0;
   let loadPdfTimeOut;
 
@@ -173,6 +208,7 @@ onDomReady(function () {
         postBawsMsg("pageRendered");
         setupResizeObserver();
       });
+      watchUnavailablePages();
       PDFViewerApplication.eventBus._on("pagechanging", evt => {
         isBookLoaded = true;
         if (evt.pageNumber) postBawsMsg("pageChanged");

@@ -370,7 +370,10 @@ class ChunkedStreamManager {
           groupedChunk.endChunk * this.chunkSize,
           this.length
         );
-        this.sendRequest(begin, end).catch(capability.reject);
+        this.sendRequest(begin, end).catch(reason => {
+          this._onRequestFailed(groupedChunk, reason);
+          capability.reject(reason);
+        });
       }
     }
 
@@ -380,6 +383,24 @@ class ChunkedStreamManager {
       }
       throw reason;
     });
+  }
+
+  /**
+   * A range request failed (e.g. offline): fail every request waiting for its
+   * chunks, and forget that they were requested, so that asking for them
+   * again downloads them again instead of waiting forever.
+   */
+  _onRequestFailed({ beginChunk, endChunk }, reason) {
+    for (let chunk = beginChunk; chunk < endChunk; chunk++) {
+      const requestIds = this._requestsByChunk.get(chunk) || [];
+      this._requestsByChunk.delete(chunk);
+      for (const requestId of requestIds) {
+        this._chunksNeededByRequest.delete(requestId);
+        const capability = this._promisesByRequest.get(requestId);
+        this._promisesByRequest.delete(requestId);
+        capability?.reject(reason);
+      }
+    }
   }
 
   getStream() {
@@ -490,6 +511,9 @@ class ChunkedStreamManager {
 
       for (const requestId of requestIds) {
         const chunksNeeded = this._chunksNeededByRequest.get(requestId);
+        if (!chunksNeeded) {
+          continue; // The request failed (see _onRequestFailed).
+        }
         if (chunksNeeded.has(curChunk)) {
           chunksNeeded.delete(curChunk);
         }

@@ -1768,3 +1768,24 @@
             margin-top: -0.25rem;
         }
     }
+/* A page that couldn't be downloaded (see watchUnavailablePages in
+   viewer-flexi.js): a message instead of a black box. */
+.pdfViewer .page.page-unavailable .canvasWrapper,
+.pdfViewer .page.page-unavailable .textLayer {
+  visibility: hidden;
+}
+/* Beats pdf.js's ".page:not(.loading)::after { display: none }". */
+.pdfViewer .page.page-unavailable::after {
+  content: "This page will load when you're back online.";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  font: 16px/1.5 system-ui, sans-serif;
+  color: #57534e;
+  background: #fafaf9;
+}

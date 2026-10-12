@@ -322,7 +322,8 @@ class PDFFetchStream {
  * exactly the first chunk (so it completes chunk 0 and nothing is fetched
  * twice) and learns the file's size and version from the response headers.
  * When the first chunk of the same version is cached, a HEAD request confirms
- * the version and the chunk is served from the cache instead.
+ * the version and the chunk is served from the cache instead; offline, the
+ * cached version is opened without confirming.
  *
  * @implements {IPDFStreamReader}
  */
@@ -436,7 +437,8 @@ class PDFFetchStreamReader {
 
   /**
    * @returns {Promise<boolean>} true when the first chunk is served from the
-   *   cache after confirming, with a HEAD request, that the file is unchanged.
+   *   cache after confirming, with a HEAD request, that the file is unchanged
+   *   (or when the HEAD request can't reach the server).
    */
   async _openFromCache(cache, url) {
     const meta = await ChunkCache.readMeta(cache, this._docKey);
@@ -452,7 +454,7 @@ class PDFFetchStreamReader {
       return false;
     }
 
-    let head;
+    let head = null;
     try {
       head = await fetch(
         url,
@@ -467,11 +469,13 @@ class PDFFetchStreamReader {
       if (ex?.name === "AbortError") {
         throw ex;
       }
-      // Offline or the server is unreachable: fall back to the network path,
-      // which reports the error the usual way.
-      return false;
+      // Offline or the server is unreachable: open the cached version, so the
+      // pages read before can be read again (others fail until back online).
     }
-    if (!head.ok || ChunkCache.versionOf(head.headers) !== meta.version) {
+    if (
+      head &&
+      (!head.ok || ChunkCache.versionOf(head.headers) !== meta.version)
+    ) {
       return false; // The file changed (or HEAD isn't supported).
     }
 
@@ -593,7 +597,14 @@ class PDFFetchStreamRangeReader {
           "please reload the page."
       );
     }
-    if (cache && response.status === 206) {
+    // Cache only the exact range asked for, so a chunk can't be stored under
+    // the wrong key.
+    const range = response.headers.get("Content-Range") || "";
+    if (
+      cache &&
+      response.status === 206 &&
+      range.startsWith(`bytes ${begin}-${end - 1}/`)
+    ) {
       ChunkCache.putChunk(cache, key, response);
     }
     this._setReader(response.body.getReader());

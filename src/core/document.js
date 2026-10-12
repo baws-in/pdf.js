@@ -389,6 +389,11 @@ class Page {
     if (!this.resourcesPromise) {
       // TODO: add async `_getInheritableProperty` and remove this.
       this.resourcesPromise = this.pdfManager.ensure(this, "resources");
+      // Not kept when it fails (e.g. its data couldn't be downloaded while
+      // offline), so that the next attempt tries again.
+      this.resourcesPromise.catch(() => {
+        this.resourcesPromise = null;
+      });
     }
     return this.resourcesPromise.then(() => {
       const objectLoader = new ObjectLoader(this.resources, keys, this.xref);
@@ -779,6 +784,10 @@ class Page {
         });
       });
 
+    // Not kept when it fails (e.g. offline), so that it's parsed again.
+    parsedAnnotations.catch(() => {
+      delete this._parsedAnnotations;
+    });
     return shadow(this, "_parsedAnnotations", parsedAnnotations);
   }
 
@@ -1589,6 +1598,12 @@ class PDFDocument {
     });
 
     this._pagePromises.set(pageIndex, promise);
+    // Not kept when it fails (e.g. offline), so that the page loads later.
+    promise.catch(() => {
+      if (this._pagePromises.get(pageIndex) === promise) {
+        this._pagePromises.delete(pageIndex);
+      }
+    });
     return promise;
   }
 

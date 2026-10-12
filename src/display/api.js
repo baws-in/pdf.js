@@ -1861,6 +1861,12 @@ class PDFPageProxy {
           if (this._transport.destroyed) {
             return; // Ignore any pending requests if the worker was terminated.
           }
+          // Forget the failed operator list (e.g. its data couldn't be
+          // downloaded while offline), so that rendering the page again asks
+          // the worker again instead of failing straight away.
+          if (this._intentStates.get(cacheKey) === intentState) {
+            this._intentStates.delete(cacheKey);
+          }
           if (intentState.operatorList) {
             // Mark operator list as complete.
             intentState.operatorList.lastChunk = true;
