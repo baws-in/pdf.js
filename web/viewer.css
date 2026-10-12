@@ -1789,3 +1789,36 @@
   color: #57534e;
   background: #fafaf9;
 }
+
+/* Classic reader: "Try the new reader" (switchReader in viewer-flexi.js),
+   a full-width row in the Reader Mode panel and a button by the zoom. */
+#tryNewReaderRow {
+  padding: 0 6px;
+  margin-bottom: 10px;
+}
+.tryNewReader {
+  font: 600 13px/1 system-ui, sans-serif;
+  color: #fff;
+  background: #2347a0;
+  border: 0;
+  border-radius: 14px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.tryNewReader:hover {
+  background: #17306f;
+}
+#tryNewReaderRow .tryNewReader {
+  display: block;
+  width: 100%;
+}
+#tryNewReaderToolbar {
+  float: left;
+  margin: 3px 6px 0 0;
+  padding: 5px 10px;
+}
+@media (max-width: 899px) {
+  #tryNewReaderToolbar {
+    display: none;
+  }
+}

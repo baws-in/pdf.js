@@ -76,6 +76,7 @@
     note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     notebook:
       '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    swap: '<path d="M4 8h14l-4-4M20 16H6l4 4"/>',
     help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>',
     trash:
       '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/>',
@@ -4005,6 +4006,16 @@
           JSON.stringify({ action: "openPradnya" }),
           "*"
         ),
+    });
+    registerAction({
+      id: "classicReader",
+      label: "Classic reader",
+      icon: "swap",
+      placements: ["more"],
+      group: "Reading",
+      priority: 5,
+      // The app saves the choice and reopens this page (viewer-flexi.js).
+      run: () => window.switchReader?.("classic"),
     });
     registerAction({
       id: "tour",

@@ -31,6 +31,74 @@ const toggleView = event => {
 // text | pdf
 window.VIEW_MODE = "pdf";
 window.switchMode = switchMode;
+
+// Switches between the classic reader and the new one (reader-ui.js, "ui=2").
+// Inside the BAWS.in app, the app saves the choice and reopens the book at
+// this page; on its own the viewer remembers it (localStorage.readerUI: "1"
+// classic, "2" new) and reloads. The address is edited as text so the file=
+// part (which can contain its own "?") stays exactly as it was.
+function switchReader(to) {
+  if (window.parent !== window) {
+    window.parent.postMessage(
+      JSON.stringify({ action: "switchReader", data: to }),
+      "*"
+    );
+    return;
+  }
+  try {
+    localStorage.setItem("readerUI", to === "new" ? "2" : "1");
+  } catch (e) {}
+  const dropUi = text =>
+    text.replace(/([?#&])ui=2(&|$)/, (match, before, after) =>
+      after ? before : ""
+    );
+  let search = dropUi(location.search);
+  if (to === "new") {
+    search = search ? "?ui=2&" + search.slice(1) : "?ui=2";
+  }
+  let hash = dropUi(location.hash);
+  const page = window.PDFViewerApplication?.page;
+  if (page) {
+    hash = "#page=" + page;
+  }
+  location.assign(location.pathname + search + hash);
+}
+window.switchReader = switchReader;
+
+// Classic reader: offer the new one in the Reader Mode panel (doq, in
+// addon/) and, on wide screens, next to the zoom select.
+if (window.BAWS_READER_UI !== 2) {
+  const addTryNewReader = () => {
+    const panel = document.querySelector("#readerToolbar .mainPanel");
+    if (panel && !document.getElementById("tryNewReaderRow")) {
+      const row = document.createElement("div");
+      row.id = "tryNewReaderRow";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "tryNewReader";
+      button.textContent = "Try the new reader";
+      button.addEventListener("click", () => switchReader("new"));
+      row.append(button);
+      panel.after(row);
+    }
+    const zoom = document.getElementById("scaleSelectContainer");
+    if (zoom && !document.getElementById("tryNewReaderToolbar")) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.id = "tryNewReaderToolbar";
+      button.className = "tryNewReader";
+      button.title = "Try the new reader";
+      button.textContent = "New reader";
+      button.addEventListener("click", () => switchReader("new"));
+      zoom.before(button);
+    }
+  };
+  if (window.DOQReader) {
+    addTryNewReader();
+  } else {
+    document.addEventListener("doq:ready", addTryNewReader, { once: true });
+  }
+}
 var isShareButtonHooked = false;
 var selectedText = "";
 const RENDER_SCALE = 1.5;
