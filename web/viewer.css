@@ -1791,7 +1791,7 @@
 }
 
 /* Classic reader: "Try the new reader" (switchReader in viewer-flexi.js),
-   a full-width row in the Reader Mode panel and a button by the zoom. */
+   a full-width row in the Reader Mode panel. */
 #tryNewReaderRow {
   padding: 0 6px;
   margin-bottom: 10px;
@@ -1811,14 +1811,4 @@
 #tryNewReaderRow .tryNewReader {
   display: block;
   width: 100%;
-}
-#tryNewReaderToolbar {
-  float: left;
-  margin: 3px 6px 0 0;
-  padding: 5px 10px;
-}
-@media (max-width: 899px) {
-  #tryNewReaderToolbar {
-    display: none;
-  }
 }

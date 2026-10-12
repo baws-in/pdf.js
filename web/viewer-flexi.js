@@ -66,7 +66,7 @@ function switchReader(to) {
 window.switchReader = switchReader;
 
 // Classic reader: offer the new one in the Reader Mode panel (doq, in
-// addon/) and, on wide screens, next to the zoom select.
+// addon/).
 if (window.BAWS_READER_UI !== 2) {
   const addTryNewReader = () => {
     const panel = document.querySelector("#readerToolbar .mainPanel");
@@ -80,17 +80,6 @@ if (window.BAWS_READER_UI !== 2) {
       button.addEventListener("click", () => switchReader("new"));
       row.append(button);
       panel.after(row);
-    }
-    const zoom = document.getElementById("scaleSelectContainer");
-    if (zoom && !document.getElementById("tryNewReaderToolbar")) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.id = "tryNewReaderToolbar";
-      button.className = "tryNewReader";
-      button.title = "Try the new reader";
-      button.textContent = "New reader";
-      button.addEventListener("click", () => switchReader("new"));
-      zoom.before(button);
     }
   };
   if (window.DOQReader) {
