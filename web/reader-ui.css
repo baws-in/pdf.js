@@ -2027,20 +2027,37 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
     padding: 0 16px 16px;
   }
 
-  /* Centred in the tab row, which stays at the top of the panel. */
-  .rui-panel-close {
-    position: absolute;
+  /* Tabs and the close button in one row at the top of the panel. */
+  .rui-panel-head {
+    position: sticky;
     top: 0;
-    right: 6px;
-    height: 44px;
+    z-index: 1;
+    flex: none;
     display: flex;
     align-items: center;
-    z-index: 2;
+    margin: 0 -16px;
+    padding-right: 4px;
+    background: var(--rui-surface-solid);
+    border-bottom: 1px solid var(--rui-line);
   }
 
-  .rui-panel .rui-tabs {
-    top: 0;
-    padding-right: 44px;
+  .rui-panel-head .rui-tabs {
+    position: static;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    border-bottom: 0;
+  }
+
+  .rui-panel-close {
+    flex: none;
+  }
+
+  /* A little tighter than in the sheet, so all four tabs (with their
+     counts) fit beside the close button. */
+  .rui-panel .rui-tab {
+    padding: 0 7px !important;
+    font-size: 13px !important;
   }
 
   .rui-sheet {

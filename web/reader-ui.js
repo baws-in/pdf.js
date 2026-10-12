@@ -2598,7 +2598,13 @@
   const PANEL_WIDTH = 340;
   // Narrower windows get the bottom sheet, as on phones.
   const PANEL_MIN_WINDOW = 900;
-  const sidePanel = { el: null, body: null, open: false, chapter: null };
+  const sidePanel = {
+    el: null,
+    body: null,
+    close: null,
+    open: false,
+    chapter: null,
+  };
 
   function panelAllowed() {
     return window.innerWidth >= PANEL_MIN_WINDOW;
@@ -2624,8 +2630,9 @@
     // eslint-disable-next-line no-unsanitized/property
     close.innerHTML = icon("close");
     close.addEventListener("click", () => closePanel());
+    sidePanel.close = close;
     sidePanel.body = el("div", "rui-panel-body");
-    sidePanel.el.append(close, sidePanel.body);
+    sidePanel.el.append(sidePanel.body);
     sidePanel.el.addEventListener("keydown", event => {
       if (event.key === "Escape") {
         event.stopPropagation();
@@ -2664,6 +2671,13 @@
     const scrollTop = sidePanel.body.scrollTop;
     sidePanel.body.replaceChildren();
     buildNotebook(sidePanel.body);
+    // The tabs and the close button share a header row, so the button never
+    // covers a tab (the tabs scroll sideways in what's left when they don't
+    // fit).
+    const tabs = sidePanel.body.querySelector(".rui-tabs");
+    const head = el("div", "rui-panel-head");
+    tabs.replaceWith(head);
+    head.append(tabs, sidePanel.close);
     if (keepScroll) {
       sidePanel.body.scrollTop = scrollTop;
     }
