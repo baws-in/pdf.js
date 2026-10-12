@@ -1948,6 +1948,95 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   cursor: help;
 }
 
+/* ---------- Welcome and tour (reader-ui.js: showTourCard) ---------- */
+
+/* A hole around the control being shown; the rest of the screen is dimmed
+   by its shadow but stays usable (it doesn't catch clicks). */
+.rui-tour-spot {
+  position: fixed;
+  z-index: 1100;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+  transition:
+    left 0.2s ease,
+    top 0.2s ease,
+    width 0.2s ease,
+    height 0.2s ease;
+}
+
+.rui-tour-card {
+  position: fixed;
+  z-index: 1101;
+  width: min(360px, calc(100vw - 24px));
+  padding: 18px 18px 14px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: var(--rui-surface-solid);
+  color: var(--rui-ink);
+  font-family: var(--rui-font);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 0.25);
+}
+
+.rui-tour-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rui-tour-text {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--rui-ink-2);
+}
+
+.rui-tour-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 14px;
+}
+
+/* The welcome card: the main choice full width, the other under it. */
+.rui-tour-stacked .rui-tour-actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.rui-tour-step {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--rui-muted);
+}
+
+.rui-tour-card button {
+  font: inherit;
+  border: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.rui-tour-btn {
+  height: 40px !important;
+  padding: 0 18px !important;
+}
+
+.rui-tour-link {
+  padding: 8px 2px;
+  background: none;
+  color: var(--rui-accent-ink);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rui-tour-spot {
+    transition: none;
+  }
+}
+
 /* ---------- Larger screens ---------- */
 
 @media (min-width: 900px) {

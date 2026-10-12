@@ -76,6 +76,7 @@
     note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     notebook:
       '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>',
     trash:
       '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/>',
     bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
@@ -1203,6 +1204,7 @@
   }
 
   function showSelectionBar(range) {
+    storageSet("ruiSelectedOnce", "1");
     if (ui.selbar.hidden) {
       renderSelectionBar();
       ui.selbar.hidden = false;
@@ -3462,6 +3464,400 @@
   }
 
   // ---------------------------------------------------------------------
+  // Welcome, tour and tips
+  // ---------------------------------------------------------------------
+  //
+  // The new reader explains itself, so this stays light: a welcome card on
+  // the first book, an optional four-step tour of the things that aren't
+  // obvious (highlighting, harder-word underlines, the More tools, Listen and
+  // Save) where each step asks you to try it, and a few one-time tips at the
+  // moment they help. More → Tour replays the tour.
+
+  const TIP_AFTER_PAGES = 10;
+  const tour = { spot: null, card: null, cleanup: null, index: 0, view: null };
+
+  function touchScreen() {
+    return matchMedia("(pointer: coarse)").matches;
+  }
+
+  /** The part of the current page that is on screen. */
+  function visiblePageRect() {
+    const view = app()?.pdfViewer?.getPageView(currentPage() - 1);
+    const rect = view?.div.getBoundingClientRect();
+    if (!rect) {
+      return null;
+    }
+    const top = Math.max(rect.top, ui.top.offsetHeight);
+    const bottom = Math.min(
+      rect.bottom,
+      window.innerHeight - ui.bottom.offsetHeight
+    );
+    const left = Math.max(rect.left, 0);
+    const right = Math.min(rect.right, window.innerWidth);
+    return { left, top, width: right - left, height: bottom - top };
+  }
+
+  function rectOf(target) {
+    if (!target) {
+      return null;
+    }
+    if (Array.isArray(target)) {
+      const rects = target
+        .filter(Boolean)
+        .map(item => item.getBoundingClientRect());
+      if (!rects.length) {
+        return null;
+      }
+      const left = Math.min(...rects.map(r => r.left));
+      const top = Math.min(...rects.map(r => r.top));
+      const right = Math.max(...rects.map(r => r.right));
+      const bottom = Math.max(...rects.map(r => r.bottom));
+      return { left, top, width: right - left, height: bottom - top };
+    }
+    return target instanceof Element ? target.getBoundingClientRect() : target;
+  }
+
+  /**
+   * Shows one card of the welcome/tour, with a spotlight on its target (the
+   * rest of the screen dimmed, but everything still usable).
+   * @param {Object} view
+   * @param {function} [view.target] - returns an element, elements or a rect
+   * @param {string} view.title
+   * @param {string} view.text
+   * @param {string} [view.step] - e.g. "1 of 4"
+   * @param {string} [view.place] - "top" or "bottom"; else near the target
+   * @param {Array<Object>} view.actions - {label, run, primary}
+   */
+  function showTourCard(view) {
+    tour.view = view;
+    if (!tour.card) {
+      const host = document.getElementById("outerContainer") || document.body;
+      tour.spot = el("div", "rui-tour-spot", { "aria-hidden": "true" });
+      tour.card = el("div", "rui-tour-card", { role: "dialog" });
+      tour.card.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          endTour();
+        }
+      });
+      host.append(tour.spot, tour.card);
+      window.addEventListener("resize", placeTourCard);
+    }
+    const card = tour.card;
+    card.setAttribute("aria-label", view.title);
+    const title = el("h2", "rui-tour-title");
+    title.textContent = view.title;
+    const text = el("p", "rui-tour-text");
+    text.textContent = view.text;
+    const row = el("div", "rui-tour-actions");
+    if (view.step) {
+      const step = el("span", "rui-tour-step");
+      step.textContent = view.step;
+      row.append(step);
+    }
+    for (const action of view.actions) {
+      const button = el(
+        "button",
+        action.primary ? "rui-primary rui-tour-btn" : "rui-tour-link",
+        { type: "button" }
+      );
+      button.textContent = action.label;
+      button.addEventListener("click", action.run);
+      row.append(button);
+    }
+    card.classList.toggle("rui-tour-stacked", !!view.stacked);
+    card.replaceChildren(title, text, row);
+    placeTourCard();
+    requestAnimationFrame(() =>
+      card.querySelector(".rui-primary")?.focus({ preventScroll: true })
+    );
+  }
+
+  function placeTourCard() {
+    const view = tour.view;
+    if (!view || !tour.card) {
+      return;
+    }
+    const pad = 6;
+    const margin = 12;
+    const rect = rectOf(view.target?.());
+    const spot = tour.spot.style;
+    if (rect && rect.width > 0 && rect.height > 0) {
+      spot.left = `${rect.left - pad}px`;
+      spot.top = `${rect.top - pad}px`;
+      spot.width = `${rect.width + 2 * pad}px`;
+      spot.height = `${rect.height + 2 * pad}px`;
+    } else {
+      // No target: dim everything around a point in the middle.
+      spot.left = `${window.innerWidth / 2}px`;
+      spot.top = `${window.innerHeight / 2}px`;
+      spot.width = spot.height = "0px";
+    }
+    const card = tour.card;
+    const width = card.offsetWidth;
+    const height = card.offsetHeight;
+    let top;
+    let left = (window.innerWidth - width) / 2;
+    const besideRect =
+      view.place === "top" &&
+      rect &&
+      window.innerWidth - (rect.left + rect.width) >= width + 2 * margin;
+    if (besideRect) {
+      // Wide screens: in the margin beside the page, covering no text.
+      top = rect.top + margin;
+      left = rect.left + rect.width + pad + margin;
+    } else if (view.place === "top") {
+      top = ui.top.offsetHeight + margin;
+    } else if (view.place === "bottom") {
+      top = window.innerHeight - ui.bottom.offsetHeight - height - margin;
+    } else if (rect && rect.width > 0) {
+      const below = rect.top + rect.height + pad + margin;
+      const above = rect.top - pad - margin - height;
+      top =
+        below + height <= window.innerHeight - margin
+          ? below
+          : Math.max(above, margin);
+      left = rect.left + rect.width / 2 - width / 2;
+    } else {
+      top = (window.innerHeight - height) / 2;
+    }
+    left = Math.min(Math.max(left, margin), window.innerWidth - width - margin);
+    card.style.top = `${Math.round(top)}px`;
+    card.style.left = `${Math.round(left)}px`;
+  }
+
+  function endTour() {
+    tour.cleanup?.();
+    tour.cleanup = null;
+    tour.view = null;
+    tour.spot?.remove();
+    tour.card?.remove();
+    tour.spot = tour.card = null;
+    window.removeEventListener("resize", placeTourCard);
+  }
+
+  function tourActive() {
+    return !!tour.view;
+  }
+
+  // --- Welcome ---
+
+  function maybeWelcome() {
+    if (storageGet("ruiWelcomeSeen")) {
+      return;
+    }
+    storageSet("ruiWelcomeSeen", "1");
+    storageSet("ruiHintShown", "1"); // the welcome replaces the old hint
+    showTourCard({
+      title: "Welcome to the new reader",
+      text: touchScreen()
+        ? "Tap the page to show or hide the controls. Swipe to turn pages. " +
+          "Select any text to highlight it, look up a word or share it."
+        : "Click the page to show or hide the controls. Use ← → to turn " +
+          "pages. Select any text to highlight it, look up a word or share " +
+          "it.",
+      stacked: true,
+      actions: [
+        { label: "Show me 4 hidden things", primary: true, run: startTour },
+        { label: "Start reading", run: endTour },
+      ],
+    });
+  }
+
+  // --- The tour ---
+
+  function startTour() {
+    endTour();
+    closeSheet(true);
+    closeDefinition();
+    tour.index = 0;
+    showTourStep();
+  }
+
+  function nextTourStep() {
+    tour.cleanup?.();
+    tour.cleanup = null;
+    // Don't leave step 1's selection (and its bar) behind.
+    window.getSelection()?.removeAllRanges();
+    hideSelectionBar();
+    tour.index++;
+    showTourStep();
+  }
+
+  function showTourStep() {
+    const step = TOUR_STEPS[tour.index];
+    if (!step) {
+      endTour();
+      return;
+    }
+    setChromeHidden(false);
+    step();
+  }
+
+  const TOUR_STEPS = [
+    // 1. Highlighting: wait until something is selected, then show the bar.
+    () => {
+      showTourCard({
+        step: "1 of 4",
+        title: "Highlight a passage",
+        text: touchScreen()
+          ? "Try it: press and hold a word on the page, then drag to select " +
+            "a sentence."
+          : "Try it: drag across a sentence on the page to select it.",
+        target: visiblePageRect,
+        place: "top",
+        actions: [
+          { label: "Skip tour", run: endTour },
+          { label: "Next", primary: true, run: nextTourStep },
+        ],
+      });
+      const timer = setInterval(() => {
+        if (ui.selbar && !ui.selbar.hidden) {
+          clearInterval(timer);
+          showSelectionStep();
+        }
+      }, 250);
+      tour.cleanup = () => clearInterval(timer);
+    },
+    // 2. Harder words (books with word data), else the display settings.
+    () => {
+      const words = !!wordHelper.url;
+      const buttons = [{ label: "Skip tour", run: endTour }];
+      if (words && !wordHelperOn()) {
+        buttons.push({
+          label: "Turn on now",
+          run: () => {
+            setWordHelper(true);
+            nextTourStep();
+          },
+        });
+      }
+      buttons.push({ label: "Next", primary: true, run: nextTourStep });
+      showTourCard({
+        step: "2 of 4",
+        title: words ? "Harder words, underlined" : "Make it easier to read",
+        text: words
+          ? "Aa can underline the harder words on every page; tap one to " +
+            "see its meaning. Aa also has night and sepia, text size and " +
+            "Fit to phone."
+          : "Aa has night and sepia, text size, and Fit to phone for a " +
+            "page that's easier to read on a small screen.",
+        target: () => document.getElementById("ruiDisplay"),
+        actions: buttons,
+      });
+    },
+    // 3. The More tools.
+    () => {
+      showTourCard({
+        step: "3 of 4",
+        title: "More tools",
+        text:
+          "More has Fullscreen, Go to page, the Notebook, and sharing this " +
+          "page as an image or a QR code." +
+          (touchScreen()
+            ? " Fullscreen also keeps the screen awake while listening."
+            : ""),
+        target: () => document.getElementById("ruiMore"),
+        actions: [
+          { label: "Skip tour", run: endTour },
+          { label: "Next", primary: true, run: nextTourStep },
+        ],
+      });
+    },
+    // 4. Listen and Save.
+    () => {
+      showTourCard({
+        step: "4 of 4",
+        title: "Listen and Save",
+        text:
+          "Listen reads the book aloud, page after page. Save keeps this " +
+          "page for later: you'll find it on the home page.",
+        target: () => [
+          document.getElementById("voiceButton"),
+          document.getElementById("ruiSavePage"),
+        ],
+        actions: [{ label: "Done", primary: true, run: endTour }],
+      });
+    },
+  ];
+
+  /** Step 1, second half: point at the colours once text is selected. */
+  function showSelectionStep() {
+    showTourCard({
+      step: "1 of 4",
+      title: "Tap a colour to highlight",
+      text:
+        "Define, Share and Copy are here too. Your highlights are kept in " +
+        "the Notebook (Contents).",
+      target: () => ui.selbar,
+      // Away from the selection and its bar.
+      place:
+        ui.selbar.getBoundingClientRect().top > window.innerHeight / 2
+          ? "top"
+          : "bottom",
+      actions: [
+        { label: "Skip tour", run: endTour },
+        { label: "Next", primary: true, run: nextTourStep },
+      ],
+    });
+    // Follow the bar while the selection changes; move on after a highlight.
+    const timer = setInterval(placeTourCard, 300);
+    const onHighlight = () => setTimeout(nextTourStep, 600);
+    document.addEventListener("baws:highlightschange", onHighlight, {
+      once: true,
+    });
+    tour.cleanup = () => {
+      clearInterval(timer);
+      document.removeEventListener("baws:highlightschange", onHighlight);
+    };
+  }
+
+  // --- One-time tips ---
+
+  function tipOnce(key, message, options = {}) {
+    if (storageGet(key) || tourActive() || sheetOpen) {
+      return false;
+    }
+    storageSet(key, "1");
+    toast(message, { timeout: 8000, ...options });
+    return true;
+  }
+
+  function wireTips(a) {
+    a.eventBus._on("pagechanging", () => {
+      const turns = (parseInt(storageGet("ruiPageTurns"), 10) || 0) + 1;
+      storageSet("ruiPageTurns", String(turns));
+      if (turns < TIP_AFTER_PAGES || !storageGet("ruiWelcomeSeen")) {
+        return;
+      }
+      // One tip at a time.
+      if (!storageGet("ruiSelectedOnce")) {
+        tipOnce(
+          "ruiTipSelect",
+          "Tip: select any sentence to highlight it or look up a word."
+        );
+        return;
+      }
+      if (wordHelper.url && !wordHelperOn()) {
+        tipOnce(
+          "ruiTipWords",
+          "Underline the harder words? Tap one to see its meaning.",
+          { actionLabel: "Turn on", onAction: () => setWordHelper(true) }
+        );
+      }
+    });
+    document.addEventListener("baws:speakingchange", () => {
+      if (isSpeaking() && touchScreen() && !window.flexi_isFullscreen) {
+        tipOnce(
+          "ruiTipFullscreen",
+          "Tip: fullscreen keeps the screen awake while listening.",
+          { actionLabel: "Fullscreen", onAction: () => window.fullScreen?.() }
+        );
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------
   // Built-in actions
   // ---------------------------------------------------------------------
 
@@ -3609,6 +4005,16 @@
           JSON.stringify({ action: "openPradnya" }),
           "*"
         ),
+    });
+    registerAction({
+      id: "tour",
+      label: "Tour",
+      icon: "help",
+      placements: ["more"],
+      group: "Reading",
+      priority: 10,
+      // After More has closed.
+      run: () => setTimeout(startTour, 300),
     });
     registerAction({
       id: "goToPage",
@@ -3785,16 +4191,9 @@
         updatePlayer();
       });
 
-      if (!storageGet("ruiHintShown")) {
-        storageSet("ruiHintShown", "1");
-        const touchDevice = matchMedia("(pointer: coarse)").matches;
-        toast(
-          touchDevice
-            ? "Tap the page to show or hide controls. Swipe to turn pages."
-            : "Click the page to show or hide controls. Use ← → to turn pages.",
-          { timeout: 6000 }
-        );
-      }
+      wireTips(a);
+      // After the first page is on screen.
+      setTimeout(maybeWelcome, 1200);
     });
 
     document.addEventListener("baws:speakingchange", refreshPressedStates);
