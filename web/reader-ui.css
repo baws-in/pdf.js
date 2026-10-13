@@ -287,6 +287,11 @@ html.rui body {
   overscroll-behavior-x: none;
 }
 
+/* iOS at the normal size: the page stays centred (see wireIosCentering). */
+html.rui.rui-no-pan #viewerContainer {
+  overflow-x: hidden;
+}
+
 /* Leave room so the first and last page can scroll clear of the bars. */
 html.rui #viewer {
   padding-top: var(--rui-top-h);

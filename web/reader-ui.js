@@ -28,6 +28,13 @@
   const LONG_PRESS_MS = 600;
   const SCROLL_HIDE_DELTA = 8;
 
+  // iPhone/iPad browsers (all WebKit) scroll diagonally and bounce at the
+  // edges, so a sideways swipe also scrolls the page a little; see
+  // wireGestures() and wireScrollHiding().
+  const IS_IOS =
+    /iP(hone|od|ad)/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
   // Lucide-style 24px stroke icons.
   const ICONS = {
     back: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
@@ -363,6 +370,8 @@
 
   let chromeHidden = false;
   let suppressScrollUntil = 0;
+  // Until when scrolling comes from a sideways swipe (iOS), not reading.
+  let sidewaysSwipeUntil = 0;
 
   // A bar hides only when it covers at least this share of the page on
   // screen: hiding a bar that covers nothing just shows empty background
@@ -454,7 +463,17 @@
         ticking = true;
         requestAnimationFrame(() => {
           ticking = false;
-          const top = container.scrollTop;
+          let top = container.scrollTop;
+          if (IS_IOS) {
+            // Ignore the bounce past the top or bottom (it scrolls back the
+            // other way) and the drift of a sideways swipe.
+            const max = container.scrollHeight - container.clientHeight;
+            top = Math.min(Math.max(top, 0), max);
+            if (performance.now() < sidewaysSwipeUntil) {
+              lastTop = top;
+              return;
+            }
+          }
           const delta = top - lastTop;
           if (Math.abs(delta) < SCROLL_HIDE_DELTA) {
             return;
@@ -472,6 +491,80 @@
       },
       { passive: true }
     );
+  }
+
+  // A page wider than the screen by more than this share pans sideways
+  // (zoomed in); up to it, only its white margins are cut off.
+  const PAN_MIN_OVERFLOW = 0.2;
+
+  /** Whether the view pans sideways (zoomed in), on iOS; see canTurn(). */
+  function pansSideways(container) {
+    const overflow = container.scrollWidth - container.clientWidth;
+    return overflow > container.clientWidth * PAN_MIN_OVERFLOW;
+  }
+
+  /** The middle of the printed text on a page, in window coordinates. */
+  function textMiddle(pageView) {
+    let left = Infinity;
+    let right = -Infinity;
+    for (const span of pageView?.div.querySelectorAll(".textLayer span") ||
+      []) {
+      if (!span.textContent.trim()) {
+        continue;
+      }
+      const rect = span.getBoundingClientRect();
+      if (!rect.width) {
+        continue; // a wrapper or marker, not a line of text
+      }
+      left = Math.min(left, rect.left);
+      right = Math.max(right, rect.right);
+    }
+    return left < right ? (left + right) / 2 : null;
+  }
+
+  /**
+   * iOS: at the normal size the page is a little wider than the screen (its
+   * white margins are cut off). Swipes there turn pages, so the page doesn't
+   * pan sideways and its text is kept in the middle: book pages have the
+   * wider margin on the outside, so centring the paper would cut off text.
+   * Zoomed in, it pans as usual.
+   */
+  function wireIosCentering(container, a) {
+    if (!IS_IOS) {
+      return;
+    }
+    const update = () => {
+      const locked = !pansSideways(container);
+      document.documentElement.classList.toggle("rui-no-pan", locked);
+      if (!locked) {
+        return;
+      }
+      const max = container.scrollWidth - container.clientWidth;
+      const middle = textMiddle(a.pdfViewer.getPageView(a.page - 1));
+      if (middle === null) {
+        container.scrollLeft = max / 2; // no text (yet): centre the paper
+        return;
+      }
+      const box = container.getBoundingClientRect();
+      const shift = middle - (box.left + container.clientWidth / 2);
+      container.scrollLeft = Math.min(
+        Math.max(container.scrollLeft + shift, 0),
+        max
+      );
+    };
+    // After pdf.js has scrolled to the new page or size, and again once the
+    // page's text is there.
+    const later = () => requestAnimationFrame(update);
+    for (const name of ["pagechanging", "scalechanging", "pagesloaded"]) {
+      a.eventBus._on(name, later);
+    }
+    a.eventBus._on("textlayerrendered", e => {
+      if (e.pageNumber === a.page) {
+        later();
+      }
+    });
+    window.addEventListener("resize", later);
+    later();
   }
 
   /** With a mouse, reaching the top or bottom edge brings the controls back. */
@@ -511,6 +604,21 @@
         return true;
       }
       return false;
+    };
+
+    // Whether a sideways swipe (dx < 0: to the left) turns the page now.
+    // When zoomed in, a swipe scrolls first and turns the page only once the
+    // view is at that edge. On iOS, near the normal size, it always turns the
+    // page: there the swipe would otherwise scroll the cropped margins.
+    const canTurn = dx => {
+      if (IS_IOS && !pansSideways(container)) {
+        return true;
+      }
+      const atRight =
+        container.scrollLeft + container.clientWidth >=
+        container.scrollWidth - 2;
+      const atLeft = container.scrollLeft <= 2;
+      return dx < 0 ? atRight : atLeft;
     };
 
     const scheduleTap = () => {
@@ -573,11 +681,11 @@
         if (touch.axis !== "x" || touch.axisAt > 300 || hasSelection()) {
           return;
         }
-        const atRight =
-          container.scrollLeft + container.clientWidth >=
-          container.scrollWidth - 2;
-        const atLeft = container.scrollLeft <= 2;
-        if (((dx < 0 && atRight) || (dx > 0 && atLeft)) && event.cancelable) {
+        if (IS_IOS) {
+          sidewaysSwipeUntil = performance.now() + 700;
+        }
+        // On iOS this also stops the page scrolling along with the swipe.
+        if (canTurn(dx) && event.cancelable) {
           event.preventDefault();
         }
       },
@@ -597,28 +705,24 @@
         const dx = t.clientX - start.x;
         const dy = t.clientY - start.y;
         const dt = performance.now() - start.time;
+        if (IS_IOS && start.axis === "x") {
+          sidewaysSwipeUntil = performance.now() + 700; // momentum
+        }
 
         if (
           Math.abs(dx) >= SWIPE_MIN_X &&
-          Math.abs(dx) > 2 * Math.abs(dy) &&
+          // Thumb swipes on iPhones curve more.
+          Math.abs(dx) > (IS_IOS ? 1.5 : 2) * Math.abs(dy) &&
           dt <= SWIPE_MAX_MS &&
           !start.hadSelection &&
           !hasSelection() &&
           !sheetOpen &&
           storageGet("readerSwipe") !== "0"
         ) {
-          // When zoomed in, a sideways swipe scrolls first; only turn the
-          // page once the view is already at that edge.
-          const atRight =
-            container.scrollLeft + container.clientWidth >=
-            container.scrollWidth - 2;
-          const atLeft = container.scrollLeft <= 2;
-          // Swiping through pages is reading: get the controls out of the way.
-          if (dx < 0 && atRight) {
-            navigate("next");
-            setChromeHidden(true, { auto: true });
-          } else if (dx > 0 && atLeft) {
-            navigate("prev");
+          if (canTurn(dx)) {
+            navigate(dx < 0 ? "next" : "prev");
+            // Swiping through pages is reading: get the controls out of the
+            // way.
             setChromeHidden(true, { auto: true });
           }
           return;
@@ -4693,6 +4797,7 @@
       const container = document.getElementById("viewerContainer");
       wireScrollHiding(container);
       wireGestures(container);
+      wireIosCentering(container, a);
       wireSelectionBar(container);
       wirePlayer();
       wireNotebook();
