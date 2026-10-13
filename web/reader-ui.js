@@ -3883,7 +3883,19 @@
     HI: "Dr. Babasaheb Ambedkar Sampoorna Vangmay",
     MR: "Dr. Babasaheb Ambedkar: Lekhan ani Bhashane",
   };
-  const EN_PUBLISHER = "Education Department, Government of Maharashtra";
+  const UNKNOWN_YEAR = "XXXX";
+  // The English set as cited: the Dr. Ambedkar Foundation's 2019 reprint.
+  // Per volume: the year it was first published and its compiler (add the
+  // rest as they're confirmed; unknown years show as XXXX to fill in).
+  const EN_EDITION = {
+    year: 2019,
+    publisher:
+      "Dr. Ambedkar Foundation, Ministry of Social Justice & Empowerment, " +
+      "Government of India",
+  };
+  const EN_VOLUMES = {
+    Volume_01: { published: 1979, compiler: "V. Moon" },
+  };
   // For the short style.
   const SHORT_SERIES = { EN: "Writings and Speeches" };
 
@@ -3959,7 +3971,9 @@
       shortSeries:
         SHORT_SERIES[data.language] || SERIES[data.language] || SERIES.EN,
       volume: volumeOf(data.bookName),
-      publisher: data.language === "EN" ? EN_PUBLISHER : "",
+      edition: data.language === "EN" ? EN_EDITION : null,
+      published: EN_VOLUMES[data.bookName]?.published || UNKNOWN_YEAR,
+      compiler: EN_VOLUMES[data.bookName]?.compiler || "",
       page: printed > 0 ? String(printed) : UNKNOWN_PAGE,
       url: shortPageUrl(),
       accessed: new Date(),
@@ -3968,9 +3982,12 @@
 
   /**
    * The citation as plain text and as HTML (titles in italics), in one of
-   * CITE_STYLES. Formats follow APA 7, MLA 9 and Chicago 17 (bibliography)
-   * for a work in a multi-volume collection; the year of the volume isn't
-   * known here, so APA says "n.d." and the others leave it out.
+   * CITE_STYLES. The English volumes are cited as the 2019 reprint with the
+   * year first published (APA, e.g. "Ambedkar, B. R. (2019). Dr. Babasaheb
+   * Ambedkar: Writings and speeches (Vol. 1, p. 41) (V. Moon, Comp.). Dr.
+   * Ambedkar Foundation, …. (Original work published 1979)."); MLA 9 and
+   * Chicago 17 (bibliography) use the same facts. Other languages, without
+   * edition details, get "n.d." in APA.
    */
   function formatCitation(style, f) {
     const em = text => ({ text, em: true });
@@ -3978,22 +3995,31 @@
     const month = f.accessed.toLocaleString("en-GB", { month: "short" });
     const longMonth = f.accessed.toLocaleString("en-US", { month: "long" });
     const year = f.accessed.getFullYear();
-    const publisher = f.publisher ? `${f.publisher}. ` : "";
+    const ed = f.edition;
     let parts;
     switch (style) {
       case "apa":
-        parts = [
-          `Ambedkar, B. R. (n.d.). ${f.work}. In `,
-          em(f.series),
-          ` (Vol. ${f.volume}, p. ${f.page}). ${publisher}${f.url}`,
-        ];
+        parts = ed
+          ? [
+              `Ambedkar, B. R. (${ed.year}). `,
+              em("Dr. Babasaheb Ambedkar: Writings and speeches"),
+              ` (Vol. ${f.volume}, p. ${f.page})` +
+                (f.compiler ? ` (${f.compiler}, Comp.)` : "") +
+                `. ${ed.publisher}. (Original work published ${f.published}).`,
+            ]
+          : [
+              `Ambedkar, B. R. (n.d.). ${f.work}. In `,
+              em(f.series),
+              ` (Vol. ${f.volume}, p. ${f.page}). ${f.url}`,
+            ];
         break;
       case "mla":
         parts = [
           `Ambedkar, B. R. “${f.work}.” `,
           em(f.series),
-          `, vol. ${f.volume}` +
-            (f.publisher ? `, ${f.publisher}` : "") +
+          (f.compiler ? `, compiled by ${f.compiler}` : "") +
+            `, vol. ${f.volume}` +
+            (ed ? `, ${ed.publisher}, ${ed.year}` : "") +
             `, p. ${f.page}. `,
           em("BAWS.in"),
           `, ${f.url}. Accessed ${day} ${month}. ${year}.`,
@@ -4003,8 +4029,12 @@
         parts = [
           `Ambedkar, B. R. “${f.work}.” In `,
           em(f.series),
-          `, vol. ${f.volume}, ${f.page}. ${publisher}` +
-            `Accessed ${longMonth} ${day}, ${year}. ${f.url}.`,
+          (f.compiler ? `, compiled by ${f.compiler}` : "") +
+            `, vol. ${f.volume}, ${f.page}. ` +
+            (ed
+              ? `${ed.publisher}, ${ed.year}. First published ${f.published}. `
+              : `Accessed ${longMonth} ${day}, ${year}. `) +
+            `${f.url}.`,
         ];
         break;
       default:
@@ -4072,6 +4102,7 @@
           button.setAttribute("aria-pressed", String(button.value === style));
         }
         const citation = formatCitation(style, facts);
+        showNote(citation);
         preview.replaceChildren(
           ...citation.parts.map(part => {
             if (typeof part === "string") {
@@ -4094,10 +4125,21 @@
         });
         picker.append(button);
       }
-      note.textContent =
-        facts.page === UNKNOWN_PAGE
-          ? `Replace ${UNKNOWN_PAGE} with the page number printed on the page.`
+      const showNote = citation => {
+        const todo = [];
+        if (facts.page === UNKNOWN_PAGE) {
+          todo.push(`${UNKNOWN_PAGE} with the page number printed on the page`);
+        }
+        // Only the styles that show the first year (APA, Chicago).
+        if (citation.text.includes(UNKNOWN_YEAR)) {
+          todo.push(
+            `${UNKNOWN_YEAR} with the year this volume was first published`
+          );
+        }
+        note.textContent = todo.length
+          ? `Replace ${todo.join(", and ")}.`
           : "Page numbers are the printed ones in the book.";
+      };
       copy.addEventListener("click", async () => {
         const ok = await copyCitation(show());
         toast(ok ? "Citation copied." : "Couldn't copy the citation.");
