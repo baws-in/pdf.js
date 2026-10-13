@@ -3863,215 +3863,81 @@
   // Citation
   // ---------------------------------------------------------------------
   //
-  // "Citation" (More → Misc) cites the current page in a chosen style and
-  // copies it. The printed page number comes from the app, which knows each
-  // volume's page offsets: window.parent.pdf2book("EN/Volume_07", 240) → 221
-  // (null for pages without one, e.g. front matter). Without it the page is
-  // "XXX", for the reader to fill in.
+  // "Citation" (More → Misc) shows the current page cited in a few styles
+  // and copies the one chosen. The citations come from the app, which knows
+  // the books (editions, editors, printed page numbers):
+  //
+  //   window.parent.getCitation({ language, bookName, pdfPage, titles, url })
+  //     → [{ id, label, parts, note }]
+  //
+  // `titles` is the outline path of the page (work first, chapter last);
+  // `parts` are strings and { text, em: true } pieces (italics); `note` says
+  // what's left to fill in, if anything. Without it there's no Citation.
 
-  const CITE_STYLES = [
-    { id: "apa", label: "APA" },
-    { id: "mla", label: "MLA" },
-    { id: "chicago", label: "Chicago" },
-    { id: "short", label: "Short" },
-  ];
-  const UNKNOWN_PAGE = "XXX";
-
-  // The series title of each edition.
-  const SERIES = {
-    EN: "Dr. Babasaheb Ambedkar: Writings and Speeches",
-    HI: "Dr. Babasaheb Ambedkar Sampoorna Vangmay",
-    MR: "Dr. Babasaheb Ambedkar: Lekhan ani Bhashane",
-  };
-  const UNKNOWN_YEAR = "XXXX";
-  // The English set as cited: the Dr. Ambedkar Foundation's 2019 reprint.
-  // Per volume: the year it was first published and its compiler (add the
-  // rest as they're confirmed; unknown years show as XXXX to fill in).
-  const EN_EDITION = {
-    year: 2019,
-    publisher:
-      "Dr. Ambedkar Foundation, Ministry of Social Justice & Empowerment, " +
-      "Government of India",
-  };
-  const EN_VOLUMES = {
-    Volume_01: { published: 1979, compiler: "V. Moon" },
-  };
-  // For the short style.
-  const SHORT_SERIES = { EN: "Writings and Speeches" };
-
-  /** "Volume_07" → "7"; "Volume_14_01" → "14, Part 1" (Khand_18_2 alike). */
-  function volumeOf(bookName) {
-    const m = /^[A-Za-z]+_(\d+)(?:_(\d+))?$/.exec(bookName || "");
-    if (!m) {
-      return (bookName || "").replaceAll("_", " ");
-    }
-    const volume = String(Number(m[1]));
-    return m[2] ? `${volume}, Part ${Number(m[2])}` : volume;
-  }
-
-  /**
-   * Outline titles without their numbering, with words in capitals in title
-   * case ("WHO WERE THE SHUDRAS? How they came…" → "Who Were the Shudras?
-   * How they came…"); other words stay as they are.
-   */
-  function titleCase(title) {
-    const text = cleanTitle(title).replace(/^[IVXLC\d]+\.\s+/, "");
-    const small = new Set([
-      "a",
-      "an",
-      "and",
-      "as",
-      "at",
-      "by",
-      "for",
-      "in",
-      "of",
-      "on",
-      "or",
-      "the",
-      "to",
-      "with",
-    ]);
-    const capitals = /^[^a-z]*[A-Z]{2}[^a-z]*$/;
-    return text
-      .split(" ")
-      .map((word, i) => {
-        if (!capitals.test(word)) {
-          return word;
-        }
-        const lower = word.toLowerCase();
-        if (i > 0 && small.has(lower)) {
-          return lower;
-        }
-        return lower.charAt(0).toUpperCase() + lower.slice(1);
-      })
-      .join(" ");
-  }
-
-  /** What a citation of the current page needs. */
-  function citationFacts() {
-    const data = window.getBookUrlData?.() || {};
-    const pdfPage = currentPage();
-    const path = outlinePath(pdfPage);
-    const work = titleCase(path[0]?.title) || bookLabel();
-    const chapter = path.length > 1 ? titleCase(path.at(-1).title) : "";
-    let printed = null;
+  function citationSource() {
     try {
-      printed = window.parent.pdf2book?.(
-        `${data.language}/${data.bookName}`,
-        pdfPage
-      );
+      const get = window.parent !== window && window.parent.getCitation;
+      return typeof get === "function" ? get : null;
     } catch {
-      // Cross-origin parent: no page offsets.
+      return null; // a parent on another origin
     }
-    return {
-      work,
-      chapter,
-      series: SERIES[data.language] || SERIES.EN,
-      shortSeries:
-        SHORT_SERIES[data.language] || SERIES[data.language] || SERIES.EN,
-      volume: volumeOf(data.bookName),
-      edition: data.language === "EN" ? EN_EDITION : null,
-      published: EN_VOLUMES[data.bookName]?.published || UNKNOWN_YEAR,
-      compiler: EN_VOLUMES[data.bookName]?.compiler || "",
-      page: printed > 0 ? String(printed) : UNKNOWN_PAGE,
-      url: shortPageUrl(),
-      accessed: new Date(),
-    };
   }
 
-  /**
-   * The citation as plain text and as HTML (titles in italics), in one of
-   * CITE_STYLES. The English volumes are cited as the 2019 reprint with the
-   * year first published (APA, e.g. "Ambedkar, B. R. (2019). Dr. Babasaheb
-   * Ambedkar: Writings and speeches (Vol. 1, p. 41) (V. Moon, Comp.). Dr.
-   * Ambedkar Foundation, …. (Original work published 1979)."); MLA 9 and
-   * Chicago 17 (bibliography) use the same facts. Other languages, without
-   * edition details, get "n.d." in APA.
-   */
-  function formatCitation(style, f) {
-    const em = text => ({ text, em: true });
-    const day = f.accessed.getDate();
-    const month = f.accessed.toLocaleString("en-GB", { month: "short" });
-    const longMonth = f.accessed.toLocaleString("en-US", { month: "long" });
-    const year = f.accessed.getFullYear();
-    const ed = f.edition;
-    let parts;
-    switch (style) {
-      case "apa":
-        parts = ed
-          ? [
-              `Ambedkar, B. R. (${ed.year}). `,
-              em("Dr. Babasaheb Ambedkar: Writings and speeches"),
-              ` (Vol. ${f.volume}, p. ${f.page})` +
-                (f.compiler ? ` (${f.compiler}, Comp.)` : "") +
-                `. ${ed.publisher}. (Original work published ${f.published}).`,
-            ]
-          : [
-              `Ambedkar, B. R. (n.d.). ${f.work}. In `,
-              em(f.series),
-              ` (Vol. ${f.volume}, p. ${f.page}). ${f.url}`,
-            ];
-        break;
-      case "mla":
-        parts = [
-          `Ambedkar, B. R. “${f.work}.” `,
-          em(f.series),
-          (f.compiler ? `, compiled by ${f.compiler}` : "") +
-            `, vol. ${f.volume}` +
-            (ed ? `, ${ed.publisher}, ${ed.year}` : "") +
-            `, p. ${f.page}. `,
-          em("BAWS.in"),
-          `, ${f.url}. Accessed ${day} ${month}. ${year}.`,
-        ];
-        break;
-      case "chicago":
-        parts = [
-          `Ambedkar, B. R. “${f.work}.” In `,
-          em(f.series),
-          (f.compiler ? `, compiled by ${f.compiler}` : "") +
-            `, vol. ${f.volume}, ${f.page}. ` +
-            (ed
-              ? `${ed.publisher}, ${ed.year}. First published ${f.published}. `
-              : `Accessed ${longMonth} ${day}, ${year}. `) +
-            `${f.url}.`,
-        ];
-        break;
-      default:
-        parts = [
-          "Ambedkar, ",
-          em(f.shortSeries),
-          `, vol. ${f.volume}, p. ${f.page}` +
-            (f.chapter ? ` (“${f.chapter}”)` : "") +
-            `. ${f.url}`,
-        ];
+  function citationsForPage() {
+    const get = citationSource();
+    const data = window.getBookUrlData?.();
+    if (!get || !data) {
+      return [];
     }
+    const pdfPage = currentPage();
+    try {
+      const styles = get({
+        language: data.language,
+        bookName: data.bookName,
+        pdfPage,
+        titles: outlinePath(pdfPage).map(node => cleanTitle(node.title)),
+        url: shortPageUrl(),
+      });
+      return Array.isArray(styles)
+        ? styles.filter(s => s?.id && Array.isArray(s.parts))
+        : [];
+    } catch (ex) {
+      console.error("getCitation failed:", ex);
+      return [];
+    }
+  }
+
+  const citationText = parts =>
+    parts.map(part => (typeof part === "string" ? part : part.text)).join("");
+
+  function citationHtml(parts) {
     const escape = text =>
-      text.replaceAll(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
-    const toHtml = part => {
-      if (typeof part === "string") {
-        return escape(part);
-      }
-      return `<i>${escape(part.text)}</i>`;
-    };
-    return {
-      parts,
-      text: parts.map(p => (typeof p === "string" ? p : p.text)).join(""),
-      html: parts.map(toHtml).join(""),
-    };
+      String(text).replaceAll(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+    return parts
+      .map(part => {
+        if (typeof part === "string") {
+          return escape(part);
+        }
+        return part.em ? `<i>${escape(part.text)}</i>` : escape(part.text);
+      })
+      .join("");
   }
 
-  async function copyCitation(citation) {
+  /** Copies as plain text and as HTML (so italics survive a paste). */
+  async function copyCitation(parts) {
+    const text = citationText(parts);
     try {
       if (window.ClipboardItem && navigator.clipboard.write) {
         await navigator.clipboard.write([
           new ClipboardItem({
-            "text/plain": new Blob([citation.text], { type: "text/plain" }),
-            "text/html": new Blob([citation.html], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+            "text/html": new Blob([citationHtml(parts)], {
+              type: "text/html",
+            }),
           }),
         ]);
       } else {
-        await navigator.clipboard.writeText(citation.text);
+        await navigator.clipboard.writeText(text);
       }
       return true;
     } catch {
@@ -4080,10 +3946,14 @@
   }
 
   function openCitationSheet() {
-    const facts = citationFacts();
-    let style = storageGet("ruiCiteStyle") || "apa";
-    if (!CITE_STYLES.some(s => s.id === style)) {
-      style = "apa";
+    const styles = citationsForPage();
+    if (!styles.length) {
+      toast("Citations aren't available for this book.");
+      return;
+    }
+    let style = storageGet("ruiCiteStyle");
+    if (!styles.some(s => s.id === style)) {
+      style = styles[0].id;
     }
     openSheet("Cite this page", body => {
       body.classList.add("rui-cite");
@@ -4097,27 +3967,28 @@
         type: "button",
       });
       copy.textContent = "Copy citation";
+      const current = () => styles.find(s => s.id === style);
       const show = () => {
         for (const button of picker.children) {
           button.setAttribute("aria-pressed", String(button.value === style));
         }
-        const citation = formatCitation(style, facts);
-        showNote(citation);
+        const { parts, note: todo } = current();
         preview.replaceChildren(
-          ...citation.parts.map(part => {
+          ...parts.map(part => {
             if (typeof part === "string") {
               return document.createTextNode(part);
             }
-            const i = el("i");
-            i.textContent = part.text;
-            return i;
+            const node = el(part.em ? "i" : "span");
+            node.textContent = part.text;
+            return node;
           })
         );
-        return citation;
+        note.textContent = todo || "";
+        note.hidden = !todo;
       };
-      for (const { id, label } of CITE_STYLES) {
+      for (const { id, label } of styles) {
         const button = el("button", "", { type: "button", value: id });
-        button.textContent = label;
+        button.textContent = label || id;
         button.addEventListener("click", () => {
           style = id;
           storageSet("ruiCiteStyle", id);
@@ -4125,23 +3996,8 @@
         });
         picker.append(button);
       }
-      const showNote = citation => {
-        const todo = [];
-        if (facts.page === UNKNOWN_PAGE) {
-          todo.push(`${UNKNOWN_PAGE} with the page number printed on the page`);
-        }
-        // Only the styles that show the first year (APA, Chicago).
-        if (citation.text.includes(UNKNOWN_YEAR)) {
-          todo.push(
-            `${UNKNOWN_YEAR} with the year this volume was first published`
-          );
-        }
-        note.textContent = todo.length
-          ? `Replace ${todo.join(", and ")}.`
-          : "Page numbers are the printed ones in the book.";
-      };
       copy.addEventListener("click", async () => {
-        const ok = await copyCitation(show());
+        const ok = await copyCitation(current().parts);
         toast(ok ? "Citation copied." : "Couldn't copy the citation.");
         if (ok) {
           closeSheet();
@@ -4319,6 +4175,8 @@
       group: "Misc",
       priority: 20,
       keepSheetOpen: true,
+      // Only inside the app, which provides the citations.
+      visible: () => !!citationSource(),
       run: openCitationSheet,
     });
     registerAction({
