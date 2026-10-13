@@ -1979,6 +1979,72 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   align-self: flex-end;
 }
 
+/* ---------- Print pages (reader-ui.js: openPrintSheet) ---------- */
+
+.rui-print {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rui-print-options {
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--rui-hover);
+  overflow: hidden;
+}
+
+.rui-print-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 16px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.rui-print-option + .rui-print-option {
+  border-top: 1px solid var(--rui-line);
+}
+
+.rui-print-option input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--rui-accent);
+}
+
+.rui-print-option.rui-disabled {
+  color: var(--rui-muted);
+  cursor: default;
+}
+
+/* Small, not the full width of .rui-input. */
+.rui-print-option .rui-print-count {
+  flex: none;
+  width: 4.5em;
+  height: 38px;
+  padding: 0 10px;
+  text-align: center;
+}
+
+.rui-print-summary,
+.rui-print-tip {
+  margin: 0;
+  font-size: 14px;
+  color: var(--rui-muted);
+}
+
+.rui-print-go {
+  align-self: flex-end;
+}
+
+.rui-print-go[disabled] {
+  opacity: 0.7;
+}
+
 /* ---------- Welcome and tour (reader-ui.js: showTourCard) ---------- */
 
 /* A hole around the control being shown; the rest of the screen is dimmed

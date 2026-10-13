@@ -44,6 +44,8 @@
     next: '<path d="m9 18 6-6-6-6"/>',
     close: '<path d="M18 6 6 18M6 6l12 12"/>',
     page: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M9 13h6M9 17h3"/>',
+    print:
+      '<path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/>',
     textView: '<path d="M4 6h16M4 10h16M4 14h16M4 18h10"/>',
     phone:
       '<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/>',
@@ -4010,10 +4012,332 @@
   }
 
   // ---------------------------------------------------------------------
+  // Print pages
+  // ---------------------------------------------------------------------
+  //
+  // "Print" (More → Share) prints this page, the next five or the rest of
+  // the chapter (at most PRINT_MAX_PAGES), each on its own sheet and drawn
+  // afresh from the PDF at print resolution, so nothing on screen comes
+  // along (no word underlines, no controls). Optionally each page gets its
+  // QR code (as in the share image) and the reader's highlights. The pages
+  // go into a hidden frame that is printed on its own; the print dialog
+  // offers two-sided printing.
+
+  const PRINT_SCALE = 3; // 216 dpi
+  const PRINT_MAX_PAGES = 20;
+  const PRINT_NEXT = 5;
+  // Highlight colours on paper (as on screen, a little stronger).
+  const PRINT_HIGHLIGHTS = {
+    yellow: "rgb(255 236 64 / 0.6)",
+    blue: "rgb(96 150 235 / 0.4)",
+    green: "rgb(100 190 105 / 0.4)",
+    pink: "rgb(236 120 170 / 0.4)",
+  };
+
+  function inNativeApp() {
+    try {
+      return window.parent !== window && !!window.parent.isNativeApp;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The pages to print: "this" page, `count` pages from here ("pages"), or
+   * the rest of the chapter ("chapter"); never more than PRINT_MAX_PAGES.
+   */
+  function printRange(choice, count = PRINT_NEXT) {
+    const first = currentPage();
+    let last = first;
+    if (choice === "pages") {
+      last = first + count - 1;
+    } else if (choice === "chapter") {
+      const end = outlinePath(first).at(-1)?.end;
+      last = end >= first ? end : first;
+    }
+    last = Math.min(last, first + PRINT_MAX_PAGES - 1, pagesCount());
+    return { first, last };
+  }
+
+  function openPrintSheet() {
+    let choice = "this";
+    let count = PRINT_NEXT;
+    let withQr = storageGet("ruiPrintQr") !== "0";
+    let withHighlights = storageGet("ruiPrintHighlights") !== "0";
+    const page = currentPage();
+    const chapterEnd = outlinePath(page).at(-1)?.end;
+    const chapterLeft = chapterEnd > page ? chapterEnd - page + 1 : 0;
+    openSheet("Print pages", body => {
+      body.classList.add("rui-print");
+      const options = el("div", "rui-print-options", {
+        role: "radiogroup",
+        "aria-label": "Pages to print",
+      });
+      const summary = el("p", "rui-print-summary");
+
+      const radios = [];
+      const addOption = (id, build, disabled = false) => {
+        const label = el("label", "rui-print-option");
+        const radio = el("input", "", {
+          type: "radio",
+          name: "ruiPrintPages",
+          value: id,
+        });
+        radio.checked = id === choice;
+        radio.disabled = disabled;
+        radio.addEventListener("change", () => {
+          choice = id;
+          show();
+        });
+        label.append(radio, ...build());
+        label.classList.toggle("rui-disabled", disabled);
+        options.append(label);
+        radios.push(radio);
+        return radio;
+      };
+
+      addOption("this", () => ["This page"]);
+      const number = el("input", "rui-input rui-print-count", {
+        type: "number",
+        inputmode: "numeric",
+        min: "1",
+        max: String(PRINT_MAX_PAGES),
+        "aria-label": "Number of pages",
+      });
+      number.value = String(count);
+      const pagesRadio = addOption("pages", () => [number, " pages from here"]);
+      // Typing a number chooses this option.
+      number.addEventListener("input", () => {
+        const n = parseInt(number.value, 10);
+        if (n >= 1) {
+          count = Math.min(n, PRINT_MAX_PAGES);
+        }
+        choice = "pages";
+        pagesRadio.checked = true;
+        show();
+      });
+      number.addEventListener("focus", () => {
+        choice = "pages";
+        pagesRadio.checked = true;
+        show();
+      });
+      addOption(
+        "chapter",
+        () => [
+          chapterLeft
+            ? `Rest of chapter (${chapterLeft} page${
+                chapterLeft === 1 ? "" : "s"
+              })`
+            : "Rest of chapter (this is its last page)",
+        ],
+        !chapterLeft
+      );
+
+      const show = () => {
+        const { first, last } = printRange(choice, count);
+        const sheets = last - first + 1;
+        let text = first === last ? `Page ${first}` : `Pages ${first}–${last}`;
+        text += ` · ${sheets} sheet${sheets === 1 ? "" : "s"}`;
+        if (choice === "chapter" && chapterLeft > PRINT_MAX_PAGES) {
+          text += ` (the first ${PRINT_MAX_PAGES} pages of the chapter)`;
+        }
+        if (choice === "pages" && first + count - 1 > pagesCount()) {
+          text += " (to the end of the book)";
+        }
+        summary.textContent = text;
+      };
+
+      const toggles = el("div", "rui-toggles");
+      toggles.append(
+        makeSwitch("QR code on each page", withQr, on => {
+          withQr = on;
+          storageSet("ruiPrintQr", on ? "1" : "0");
+        }),
+        makeSwitch("Keep my highlights", withHighlights, on => {
+          withHighlights = on;
+          storageSet("ruiPrintHighlights", on ? "1" : "0");
+        })
+      );
+      const tip = el("p", "rui-print-tip");
+      tip.textContent =
+        "To save paper, choose two-sided printing in the print dialog.";
+      const go = el("button", "rui-primary rui-print-go", { type: "button" });
+      go.textContent = "Print";
+      go.addEventListener("click", async () => {
+        const { first, last } = printRange(choice, count);
+        go.disabled = true;
+        const ok = await printPages(first, last, {
+          withQr,
+          withHighlights,
+          onProgress: (done, total) => {
+            go.textContent =
+              total > 1 ? `Preparing ${done} of ${total}…` : "Preparing…";
+          },
+        });
+        if (ok) {
+          closeSheet();
+        } else {
+          go.disabled = false;
+          go.textContent = "Print";
+        }
+      });
+      body.append(options, summary, toggles, tip, go);
+      show();
+    });
+  }
+
+  /** One page as a print-ready image (a blob URL), or null. */
+  async function printPageImage(pageNumber, { withQr, withHighlights }) {
+    const pdf = app().pdfDocument;
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: PRINT_SCALE });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // The QR code loads its logo over the network: start it first.
+    const qrSize = Math.round(canvas.height * 0.07);
+    const qrData =
+      withQr && window.getQRCode
+        ? Promise.race([
+            window
+              .getQRCode(shortPageUrl(pageNumber), qrSize)
+              .getRawData("png"),
+            new Promise(resolve => {
+              setTimeout(resolve, 3000, null); // print without it
+            }),
+          ]).catch(() => null)
+        : null;
+    await page.render({ canvasContext: ctx, viewport, intent: "print" })
+      .promise;
+
+    if (withHighlights) {
+      // "multiply" tints like a highlighter pen and keeps the text readable.
+      ctx.globalCompositeOperation = "multiply";
+      for (const highlight of bookHighlights()) {
+        if (highlight.pageNo !== pageNumber) {
+          continue;
+        }
+        ctx.fillStyle = PRINT_HIGHLIGHTS[highlightColor(highlight)];
+        for (const r of highlight.rects || []) {
+          ctx.fillRect(
+            (r.leftPercent / 100) * canvas.width,
+            (r.topPercent / 100) * canvas.height,
+            (r.widthPercent / 100) * canvas.width,
+            (r.heightPercent / 100) * canvas.height
+          );
+        }
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    const qrBlob = await qrData;
+    if (qrBlob) {
+      const qr = await createImageBitmap(qrBlob);
+      const margin = Math.round(canvas.height * 0.01);
+      ctx.drawImage(
+        qr,
+        canvas.width - qrSize - margin,
+        canvas.height - qrSize - margin,
+        qrSize,
+        qrSize
+      );
+    }
+    const blob = await new Promise(resolve => {
+      canvas.toBlob(resolve, "image/jpeg", 0.92);
+    });
+    return blob ? URL.createObjectURL(blob) : null;
+  }
+
+  /** Prints pages first..last; false if they couldn't be prepared. */
+  async function printPages(first, last, options) {
+    const urls = [];
+    const count = last - first + 1;
+    try {
+      for (let n = first; n <= last; n++) {
+        options.onProgress?.(n - first + 1, count);
+        const url = await printPageImage(n, options);
+        if (url) {
+          urls.push(url);
+        }
+      }
+    } catch (ex) {
+      console.error("Print: couldn't draw a page:", ex);
+      for (const url of urls) {
+        URL.revokeObjectURL(url);
+      }
+      toast("Couldn't prepare the pages for printing.");
+      return false;
+    }
+
+    document.getElementById("ruiPrintFrame")?.remove();
+    const frame = el("iframe", "", {
+      id: "ruiPrintFrame",
+      title: "Print",
+      "aria-hidden": "true",
+      tabindex: "-1",
+      style:
+        "position:fixed;right:0;bottom:0;width:0;height:0;border:0;" +
+        "visibility:hidden",
+    });
+    // Each page on its own sheet, as large as fits within the margins.
+    frame.srcdoc =
+      "<!doctype html><html><head><meta charset=utf-8><style>" +
+      "@page{margin:10mm}html,body{margin:0}" +
+      ".sheet{height:100vh;display:flex;align-items:center;" +
+      "justify-content:center;break-after:page}" +
+      ".sheet:last-child{break-after:auto}" +
+      "img{max-width:100%;max-height:100%;object-fit:contain}" +
+      "</style></head><body></body></html>";
+    const cleanUp = () => {
+      frame.remove();
+      for (const url of urls) {
+        URL.revokeObjectURL(url);
+      }
+    };
+    frame.addEventListener(
+      "load",
+      async () => {
+        const doc = frame.contentDocument;
+        doc.title =
+          `${bookLabel()} – ` +
+          (first === last ? `page ${first}` : `pages ${first}–${last}`);
+        const loads = urls.map(url => {
+          const sheet = doc.createElement("div");
+          sheet.className = "sheet";
+          const img = doc.createElement("img");
+          img.alt = "";
+          sheet.append(img);
+          doc.body.append(sheet);
+          const loaded = new Promise(resolve => {
+            img.addEventListener("load", resolve, { once: true });
+            img.addEventListener("error", resolve, { once: true });
+          });
+          img.src = url;
+          return loaded;
+        });
+        await Promise.all(loads);
+        const win = frame.contentWindow;
+        win.addEventListener("afterprint", () => setTimeout(cleanUp, 0), {
+          once: true,
+        });
+        win.focus();
+        win.print();
+      },
+      { once: true }
+    );
+    document.body.append(frame);
+    return true;
+  }
+
+  // ---------------------------------------------------------------------
   // Built-in actions
   // ---------------------------------------------------------------------
 
-  function shortPageUrl() {
+  /** The baws.in link to a page (default: the current one). */
+  function shortPageUrl(page) {
     const data = window.getBookUrlData?.();
     if (!data) {
       return location.href;
@@ -4022,7 +4346,7 @@
       location.hostname === "localhost" ? "baws.in" : location.hostname;
     return (
       `https://${host}/books/${data.bookParent}/${data.language}/` +
-      `${data.bookName}/pdf/${data.pageNo}`
+      `${data.bookName}/pdf/${page || data.pageNo}`
     );
   }
 
@@ -4273,6 +4597,18 @@
           toast("Couldn't copy the link.");
         }
       },
+    });
+    registerAction({
+      id: "printPage",
+      label: "Print",
+      icon: "print",
+      placements: ["more"],
+      group: "Share",
+      priority: 20,
+      // The Android app's web view has no print dialog.
+      visible: () => !inNativeApp(),
+      keepSheetOpen: true,
+      run: openPrintSheet,
     });
   }
 
