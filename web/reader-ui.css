@@ -120,7 +120,7 @@ html.rui #outlineView .treeItem > a {
   font-family: var(--rui-font);
 }
 
-/* "Fit to phone" text: follows the theme and the text size setting. */
+/* "Text view" text: follows the theme and the text size setting. */
 html.rui .pdfViewer .textView {
   background: var(--rui-text-bg);
   background-image: none;
@@ -129,7 +129,7 @@ html.rui .pdfViewer .textView {
   font-size: calc(17px * var(--rui-text-scale, 1));
 }
 
-/* "Fit to phone" as a reading column: the same width on every page, as tall
+/* "Text view" as a reading column: the same width on every page, as tall
    as its text. pdf.js sizes pages from the PDF page (and resizes them while
    preparing the next one), which made the text jump between widths. */
 html.rui.text-mode .pdfViewer {
@@ -167,6 +167,10 @@ html.rui.text-mode .pdfViewer .textView {
     0 8px 24px rgb(0 0 0 / 0.06);
   line-height: 1.7;
   text-align: justify;
+  /* Hyphenation keeps justified lines from opening wide gaps (needs the
+     book's language on #viewer, set by reader-ui.js). */
+  hyphens: auto;
+  -webkit-hyphens: auto;
   overflow-wrap: break-word;
 }
 
@@ -261,8 +265,6 @@ html.rui.text-mode .pdfViewer .textView.textViewUnavailable {
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    /* Justified text in a narrow column leaves wide gaps between words. */
-    text-align: start;
   }
 }
 
@@ -1940,7 +1942,7 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   border-bottom: max(1.5px, 0.12em) dotted var(--rui-accent-ink);
 }
 
-/* "Fit to phone" text */
+/* "Text view" text */
 .textView .rui-word {
   text-decoration: underline dotted var(--rui-accent-ink);
   text-decoration-thickness: 2px;

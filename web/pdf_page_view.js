@@ -270,7 +270,7 @@ class PDFPageView {
   #setDimensions() {
     const { viewport } = this;
     if (this.pdfPage) {
-      // Also when the mode changed: "Fit to phone" sizes the page to 100%,
+      // Also when the mode changed: "Text view" sizes the page to 100%,
       // and the original page needs its own size back (else it's cut off).
       if (
         this.#previousRotation === viewport.rotation &&
@@ -933,7 +933,7 @@ class PDFPageView {
                   notice.classList.add("textView", "textViewUnavailable");
                   notice.textContent =
                     "The text version of this page isn't available. " +
-                    "Switch back to the original page to read it.";
+                    "Switch to the page view to read it.";
                   div.append(notice);
                 }
                 div.setAttribute("data-loaded", true);

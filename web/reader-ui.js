@@ -44,6 +44,7 @@
     next: '<path d="m9 18 6-6-6-6"/>',
     close: '<path d="M18 6 6 18M6 6l12 12"/>',
     page: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M9 13h6M9 17h3"/>',
+    textView: '<path d="M4 6h16M4 10h16M4 14h16M4 18h10"/>',
     phone:
       '<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/>',
     fullscreen:
@@ -1963,8 +1964,8 @@
         "aria-label": "Page layout",
       });
       const modes = [
-        { mode: "pdf", label: "Original page", icon: "page" },
-        { mode: "text", label: "Fit to phone", icon: "phone" },
+        { mode: "pdf", label: "Page view", icon: "page" },
+        { mode: "text", label: "Text view", icon: "textView" },
       ];
       const sizeGroup = el("div", "rui-group");
       const modeButtons = modes.map(({ mode, label, icon: iconName }) => {
@@ -1993,7 +1994,7 @@
       };
       layoutGroup.append(sectionTitle("Layout"), layout);
 
-      // Text size (the "Fit to phone" text; the original page uses zoom)
+      // Text size (the "Text view" text; the original page uses zoom)
       const head = el("div", "rui-row-head");
       const value = el("span", "rui-row-value");
       head.append(sectionTitle("Text size"), value);
@@ -2111,7 +2112,7 @@
     return wordHelper.data?.pages[pageNumber] || [];
   }
 
-  /** Dots under the words of one page (original page or "Fit to phone"). */
+  /** Dots under the words of one page (original page or "Text view"). */
   function decorateWordPage(pageNumber) {
     const div = app()?.pdfViewer?.getPageView(pageNumber - 1)?.div;
     if (!div || !wordHelperOn() || !wordHelper.data) {
@@ -2148,7 +2149,7 @@
     }
   }
 
-  /** "Fit to phone": wrap the page's words in the reflowed text. */
+  /** "Text view": wrap the page's words in the reflowed text. */
   function decorateTextView(div, entries) {
     const view = div.querySelector(".textView:not(.textViewUnavailable)");
     if (!view || view.querySelector(".rui-word") || !entries.length) {
@@ -3741,9 +3742,9 @@
         text: words
           ? "Aa can underline the harder words on every page; tap one to " +
             "see its meaning. Aa also has night and sepia, text size and " +
-            "Fit to phone."
-          : "Aa has night and sepia, text size, and Fit to phone for a " +
-            "page that's easier to read on a small screen.",
+            "Text view."
+          : "Aa has night and sepia, text size, and Text view: the page as " +
+            "text that fits your screen.",
         target: () => document.getElementById("ruiDisplay"),
         actions: buttons,
       });
@@ -4313,7 +4314,7 @@
       });
       a.eventBus._on("pagesloaded", updatePageUI);
 
-      // A page without a text version (.md) in "Fit to phone" mode: offer
+      // A page without a text version (.md) in "Text view" mode: offer
       // the original page, once per switch into that mode.
       let textNoticeShown = false;
       a.eventBus._on("textviewunavailable", () => {
@@ -4322,7 +4323,7 @@
         }
         textNoticeShown = true;
         toast("This page has no text version yet.", {
-          actionLabel: "Show original",
+          actionLabel: "Page view",
           onAction: () => window.switchMode?.("pdf"),
           timeout: 8000,
         });
@@ -4343,6 +4344,15 @@
       });
       updatePageUI();
       waitForOutline();
+
+      // The book's language, so the browser can hyphenate the justified
+      // "Text view" text (unless the PDF names its own).
+      const lang = { EN: "en", HI: "hi", MR: "mr", GU: "gu" }[
+        window.getBookUrlData?.()?.language
+      ];
+      if (lang && !a.pdfViewer.viewer.lang) {
+        a.pdfViewer.viewer.lang = lang;
+      }
 
       const container = document.getElementById("viewerContainer");
       wireScrollHiding(container);
