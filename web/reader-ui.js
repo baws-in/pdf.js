@@ -76,6 +76,7 @@
     note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     notebook:
       '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    quote: '<path d="M7 7h4v4c0 3-1.5 5-4 6M14 7h4v4c0 3-1.5 5-4 6"/>',
     swap: '<path d="M4 8h14l-4-4M20 16H6l4 4"/>',
     help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>',
     trash:
@@ -3859,6 +3860,257 @@
   }
 
   // ---------------------------------------------------------------------
+  // Citation
+  // ---------------------------------------------------------------------
+  //
+  // "Citation" (More → Misc) cites the current page in a chosen style and
+  // copies it. The printed page number comes from the app, which knows each
+  // volume's page offsets: window.parent.pdf2book("EN/Volume_07", 240) → 221
+  // (null for pages without one, e.g. front matter). Without it the page is
+  // "XXX", for the reader to fill in.
+
+  const CITE_STYLES = [
+    { id: "apa", label: "APA" },
+    { id: "mla", label: "MLA" },
+    { id: "chicago", label: "Chicago" },
+    { id: "short", label: "Short" },
+  ];
+  const UNKNOWN_PAGE = "XXX";
+
+  // The series title of each edition.
+  const SERIES = {
+    EN: "Dr. Babasaheb Ambedkar: Writings and Speeches",
+    HI: "Dr. Babasaheb Ambedkar Sampoorna Vangmay",
+    MR: "Dr. Babasaheb Ambedkar: Lekhan ani Bhashane",
+  };
+  const EN_PUBLISHER = "Education Department, Government of Maharashtra";
+  // For the short style.
+  const SHORT_SERIES = { EN: "Writings and Speeches" };
+
+  /** "Volume_07" → "7"; "Volume_14_01" → "14, Part 1" (Khand_18_2 alike). */
+  function volumeOf(bookName) {
+    const m = /^[A-Za-z]+_(\d+)(?:_(\d+))?$/.exec(bookName || "");
+    if (!m) {
+      return (bookName || "").replaceAll("_", " ");
+    }
+    const volume = String(Number(m[1]));
+    return m[2] ? `${volume}, Part ${Number(m[2])}` : volume;
+  }
+
+  /**
+   * Outline titles without their numbering, with words in capitals in title
+   * case ("WHO WERE THE SHUDRAS? How they came…" → "Who Were the Shudras?
+   * How they came…"); other words stay as they are.
+   */
+  function titleCase(title) {
+    const text = cleanTitle(title).replace(/^[IVXLC\d]+\.\s+/, "");
+    const small = new Set([
+      "a",
+      "an",
+      "and",
+      "as",
+      "at",
+      "by",
+      "for",
+      "in",
+      "of",
+      "on",
+      "or",
+      "the",
+      "to",
+      "with",
+    ]);
+    const capitals = /^[^a-z]*[A-Z]{2}[^a-z]*$/;
+    return text
+      .split(" ")
+      .map((word, i) => {
+        if (!capitals.test(word)) {
+          return word;
+        }
+        const lower = word.toLowerCase();
+        if (i > 0 && small.has(lower)) {
+          return lower;
+        }
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+      })
+      .join(" ");
+  }
+
+  /** What a citation of the current page needs. */
+  function citationFacts() {
+    const data = window.getBookUrlData?.() || {};
+    const pdfPage = currentPage();
+    const path = outlinePath(pdfPage);
+    const work = titleCase(path[0]?.title) || bookLabel();
+    const chapter = path.length > 1 ? titleCase(path.at(-1).title) : "";
+    let printed = null;
+    try {
+      printed = window.parent.pdf2book?.(
+        `${data.language}/${data.bookName}`,
+        pdfPage
+      );
+    } catch {
+      // Cross-origin parent: no page offsets.
+    }
+    return {
+      work,
+      chapter,
+      series: SERIES[data.language] || SERIES.EN,
+      shortSeries:
+        SHORT_SERIES[data.language] || SERIES[data.language] || SERIES.EN,
+      volume: volumeOf(data.bookName),
+      publisher: data.language === "EN" ? EN_PUBLISHER : "",
+      page: printed > 0 ? String(printed) : UNKNOWN_PAGE,
+      url: shortPageUrl(),
+      accessed: new Date(),
+    };
+  }
+
+  /**
+   * The citation as plain text and as HTML (titles in italics), in one of
+   * CITE_STYLES. Formats follow APA 7, MLA 9 and Chicago 17 (bibliography)
+   * for a work in a multi-volume collection; the year of the volume isn't
+   * known here, so APA says "n.d." and the others leave it out.
+   */
+  function formatCitation(style, f) {
+    const em = text => ({ text, em: true });
+    const day = f.accessed.getDate();
+    const month = f.accessed.toLocaleString("en-GB", { month: "short" });
+    const longMonth = f.accessed.toLocaleString("en-US", { month: "long" });
+    const year = f.accessed.getFullYear();
+    const publisher = f.publisher ? `${f.publisher}. ` : "";
+    let parts;
+    switch (style) {
+      case "apa":
+        parts = [
+          `Ambedkar, B. R. (n.d.). ${f.work}. In `,
+          em(f.series),
+          ` (Vol. ${f.volume}, p. ${f.page}). ${publisher}${f.url}`,
+        ];
+        break;
+      case "mla":
+        parts = [
+          `Ambedkar, B. R. “${f.work}.” `,
+          em(f.series),
+          `, vol. ${f.volume}` +
+            (f.publisher ? `, ${f.publisher}` : "") +
+            `, p. ${f.page}. `,
+          em("BAWS.in"),
+          `, ${f.url}. Accessed ${day} ${month}. ${year}.`,
+        ];
+        break;
+      case "chicago":
+        parts = [
+          `Ambedkar, B. R. “${f.work}.” In `,
+          em(f.series),
+          `, vol. ${f.volume}, ${f.page}. ${publisher}` +
+            `Accessed ${longMonth} ${day}, ${year}. ${f.url}.`,
+        ];
+        break;
+      default:
+        parts = [
+          "Ambedkar, ",
+          em(f.shortSeries),
+          `, vol. ${f.volume}, p. ${f.page}` +
+            (f.chapter ? ` (“${f.chapter}”)` : "") +
+            `. ${f.url}`,
+        ];
+    }
+    const escape = text =>
+      text.replaceAll(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+    const toHtml = part => {
+      if (typeof part === "string") {
+        return escape(part);
+      }
+      return `<i>${escape(part.text)}</i>`;
+    };
+    return {
+      parts,
+      text: parts.map(p => (typeof p === "string" ? p : p.text)).join(""),
+      html: parts.map(toHtml).join(""),
+    };
+  }
+
+  async function copyCitation(citation) {
+    try {
+      if (window.ClipboardItem && navigator.clipboard.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": new Blob([citation.text], { type: "text/plain" }),
+            "text/html": new Blob([citation.html], { type: "text/html" }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(citation.text);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function openCitationSheet() {
+    const facts = citationFacts();
+    let style = storageGet("ruiCiteStyle") || "apa";
+    if (!CITE_STYLES.some(s => s.id === style)) {
+      style = "apa";
+    }
+    openSheet("Cite this page", body => {
+      body.classList.add("rui-cite");
+      const picker = el("div", "rui-segmented", {
+        role: "group",
+        "aria-label": "Citation style",
+      });
+      const preview = el("p", "rui-cite-text", { "aria-live": "polite" });
+      const note = el("p", "rui-cite-note");
+      const copy = el("button", "rui-primary rui-cite-copy", {
+        type: "button",
+      });
+      copy.textContent = "Copy citation";
+      const show = () => {
+        for (const button of picker.children) {
+          button.setAttribute("aria-pressed", String(button.value === style));
+        }
+        const citation = formatCitation(style, facts);
+        preview.replaceChildren(
+          ...citation.parts.map(part => {
+            if (typeof part === "string") {
+              return document.createTextNode(part);
+            }
+            const i = el("i");
+            i.textContent = part.text;
+            return i;
+          })
+        );
+        return citation;
+      };
+      for (const { id, label } of CITE_STYLES) {
+        const button = el("button", "", { type: "button", value: id });
+        button.textContent = label;
+        button.addEventListener("click", () => {
+          style = id;
+          storageSet("ruiCiteStyle", id);
+          show();
+        });
+        picker.append(button);
+      }
+      note.textContent =
+        facts.page === UNKNOWN_PAGE
+          ? `Replace ${UNKNOWN_PAGE} with the page number printed on the page.`
+          : "Page numbers are the printed ones in the book.";
+      copy.addEventListener("click", async () => {
+        const ok = await copyCitation(show());
+        toast(ok ? "Citation copied." : "Couldn't copy the citation.");
+        if (ok) {
+          closeSheet();
+        }
+      });
+      body.append(picker, preview, note, copy);
+      show();
+    });
+  }
+
+  // ---------------------------------------------------------------------
   // Built-in actions
   // ---------------------------------------------------------------------
 
@@ -3997,8 +4249,8 @@
       label: "Ask Pradnya",
       icon: "note",
       placements: ["more"],
-      group: "Ask",
-      priority: 5,
+      group: "Misc",
+      priority: 30,
       // Only inside the BAWS.in app, which hosts the Pradnya chat.
       visible: () => window.parent !== window,
       run: () =>
@@ -4018,11 +4270,21 @@
       run: () => window.switchReader?.("classic"),
     });
     registerAction({
+      id: "citation",
+      label: "Citation",
+      icon: "quote",
+      placements: ["more"],
+      group: "Misc",
+      priority: 20,
+      keepSheetOpen: true,
+      run: openCitationSheet,
+    });
+    registerAction({
       id: "tour",
       label: "Tour",
       icon: "help",
       placements: ["more"],
-      group: "Reading",
+      group: "Misc",
       priority: 10,
       // After More has closed.
       run: () => setTimeout(startTour, 300),

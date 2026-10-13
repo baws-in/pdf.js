@@ -1948,6 +1948,35 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   cursor: help;
 }
 
+/* ---------- Citation (reader-ui.js: openCitationSheet) ---------- */
+
+.rui-cite {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rui-cite-text {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--rui-hover);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.rui-cite-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--rui-muted);
+}
+
+.rui-cite-copy {
+  align-self: flex-end;
+}
+
 /* ---------- Welcome and tour (reader-ui.js: showTourCard) ---------- */
 
 /* A hole around the control being shown; the rest of the screen is dimmed
