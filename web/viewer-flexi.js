@@ -13,6 +13,16 @@ const switchMode = mode => {
   window.VIEW_MODE = mode;
   // Lets the CSS lay out "Text view" as a reading column.
   document.documentElement.classList.toggle("text-mode", mode === "text");
+  if (mode === "text") {
+    // Stop any search (from the find bar or read aloud): it would keep
+    // scrolling to matches in the PDF's text, which Text view doesn't show.
+    const app = PDFViewerApplication;
+    if (app.findBar?.opened) {
+      app.findBar.close();
+    } else {
+      app.eventBus.dispatch("findbarclose", { source: app.findBar });
+    }
+  }
   //PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width';
   PDFViewerApplication.pdfViewer.refresh();
 };
@@ -883,16 +893,21 @@ async function startNodeReading(contentNode, startIndex) {
         let currentReadIndex = i;
 
         if (toRead.match(garbage_regex)) {
-          PDFViewerApplication.eventBus.dispatch("find", {
-            source: this,
-            type: " ",
-            query: toRead,
-            caseSensitive: true,
-            entireWord: true,
-            highlightAll: true,
-            findPrevious: false,
-            matchDiacritics: false,
-          });
+          // Marks the sentence being read on the page. Not in Text view:
+          // the find scrolls to the match in the PDF's text, which makes
+          // the reflowed text jump around.
+          if (window.VIEW_MODE !== "text") {
+            PDFViewerApplication.eventBus.dispatch("find", {
+              source: this,
+              type: " ",
+              query: toRead,
+              caseSensitive: true,
+              entireWord: true,
+              highlightAll: true,
+              findPrevious: false,
+              matchDiacritics: false,
+            });
+          }
           await startReading(toRead);
         }
         if (i == contentNode.length - 1) {
@@ -1792,6 +1807,11 @@ function highlightColorOf(highlight) {
 }
 
 async function saveSelection(color) {
+  // Highlights belong to the page view: in Text view the page box is not
+  // the PDF page, so there is nowhere on the page to put them.
+  if (window.VIEW_MODE === "text") {
+    return;
+  }
   const pdfDoc = PDFViewerApplication.pdfDocument;
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
@@ -1803,9 +1823,6 @@ async function saveSelection(color) {
   // Read the text from the live selection; the global `selectedText` may be
   // stale or already rewritten by the share flow.
   const highlightText = selection.toString().replace(/(\r\n|\n|\r)/gm, " ");
-  // In reflowed text mode the page box is not the PDF page, so screen
-  // coordinates would be drawn in the wrong place in PDF mode. Save text only.
-  const isReflow = window.VIEW_MODE === "text";
 
   const startElement =
     range.startContainer.nodeType === Node.ELEMENT_NODE
@@ -1896,17 +1913,15 @@ async function saveSelection(color) {
   }
   /* --- END OPTIMIZATION LOGIC --- */
 
-  const relativeRects = isReflow
-    ? []
-    : mergedRects.map(rect => ({
-        topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
-        leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
-        widthPercent: (rect.width / pageRect.width) * 100,
-        heightPercent: (rect.height / pageRect.height) * 100,
-      }));
+  const relativeRects = mergedRects.map(rect => ({
+    topPercent: ((rect.top - pageRect.top) / pageRect.height) * 100,
+    leftPercent: ((rect.left - pageRect.left) / pageRect.width) * 100,
+    widthPercent: (rect.width / pageRect.width) * 100,
+    heightPercent: (rect.height / pageRect.height) * 100,
+  }));
 
   // If filtering removed all rectangles, do not proceed.
-  if (!isReflow && relativeRects.length === 0) {
+  if (relativeRects.length === 0) {
     console.log(
       "Selection resulted in no valid highlight rectangles after filtering."
     );

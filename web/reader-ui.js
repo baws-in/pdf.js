@@ -1277,6 +1277,11 @@
       });
       return button;
     });
+    // Highlights are drawn on the page, so Text view has none.
+    if (window.VIEW_MODE === "text") {
+      ui.selbar.replaceChildren(...buttons);
+      return;
+    }
     ui.selbar.replaceChildren(swatches, separator, ...buttons);
   }
 
@@ -3892,12 +3897,15 @@
 
   /** Step 1, second half: point at the colours once text is selected. */
   function showSelectionStep() {
+    const textView = window.VIEW_MODE === "text";
     showTourCard({
       step: "1 of 4",
-      title: "Tap a colour to highlight",
-      text:
-        "Define, Share and Copy are here too. Your highlights are kept in " +
-        "the Notebook (Contents).",
+      title: textView ? "Define, Share or Copy" : "Tap a colour to highlight",
+      text: textView
+        ? "To highlight, switch to Page view (Display): highlights are " +
+          "drawn on the page."
+        : "Define, Share and Copy are here too. Your highlights are kept in " +
+          "the Notebook (Contents).",
       target: () => ui.selbar,
       // Away from the selection and its bar.
       place:
