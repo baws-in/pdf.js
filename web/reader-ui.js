@@ -1277,7 +1277,8 @@
       });
       return button;
     });
-    // Highlights are drawn on the page, so Text view has none.
+    // Highlights are drawn on the page, so Text view has none: there, Save
+    // keeps the page with the selected passage.
     if (window.VIEW_MODE === "text") {
       ui.selbar.replaceChildren(...buttons);
       return;
@@ -3902,8 +3903,8 @@
       step: "1 of 4",
       title: textView ? "Define, Share or Copy" : "Tap a colour to highlight",
       text: textView
-        ? "To highlight, switch to Page view (Display): highlights are " +
-          "drawn on the page."
+        ? "Save (below) keeps this page with the passage you selected. " +
+          "Highlighting is in Page view."
         : "Define, Share and Copy are here too. Your highlights are kept in " +
           "the Notebook (Contents).",
       target: () => ui.selbar,

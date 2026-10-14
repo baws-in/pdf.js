@@ -1807,11 +1807,6 @@ function highlightColorOf(highlight) {
 }
 
 async function saveSelection(color) {
-  // Highlights belong to the page view: in Text view the page box is not
-  // the PDF page, so there is nowhere on the page to put them.
-  if (window.VIEW_MODE === "text") {
-    return;
-  }
   const pdfDoc = PDFViewerApplication.pdfDocument;
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
@@ -1838,6 +1833,15 @@ async function saveSelection(color) {
   // page when several pages are visible.
   const pageNum = parseInt(pageContainer.dataset.pageNumber);
   const pageRect = pageContainer.getBoundingClientRect();
+
+  // Highlights are drawn on the page, and in Text view the page box is not
+  // the PDF page: keep the page for later with the selected text instead.
+  if (window.VIEW_MODE === "text") {
+    if (highlightText.trim()) {
+      savePage(pageNum, { passage: highlightText });
+    }
+    return;
+  }
 
   let urlData = getBookUrlData();
   let shortUrl =
