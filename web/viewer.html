@@ -41,9 +41,10 @@ See https://github.com/adobe-type-tools/cmap-resources
         if (on) {
           document.documentElement.classList.add("rui");
           // Apply the saved theme before first paint (no white flash at night).
-          var theme = "system";
+          // Light until the reader picks another (see storedTheme()).
+          var theme = "light";
           try {
-            theme = localStorage.getItem("readerTheme") || "system";
+            theme = localStorage.getItem("readerTheme") || "light";
           } catch (e) {}
           if (theme === "system") {
             theme = matchMedia("(prefers-color-scheme: dark)").matches

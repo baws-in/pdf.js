@@ -92,6 +92,11 @@
     trash:
       '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/>',
     bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+    plus: '<path d="M5 12h14M12 5v14"/>',
+    minus: '<path d="M5 12h14"/>',
+    // Material "translate" (A + 文), filled.
+    translate:
+      '<path fill="currentColor" stroke="none" d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>',
   };
 
   function icon(name) {
@@ -159,6 +164,8 @@
    * @property {function} [longPress]
    * @property {function} [pressed] - returns true for a toggled-on state
    * @property {function} [visible] - returns false to hide
+   * @property {function} [badge] - returns true to show a small dot on the
+   *   button (top bar)
    */
   const actions = new Map();
 
@@ -214,8 +221,15 @@
       "aria-label": labelOf(action),
       title: labelOf(action),
     });
+    button.dataset.action = action.id;
     if (action.elementId) {
       button.id = action.elementId;
+    }
+    if (action.pressed) {
+      button.setAttribute("aria-pressed", String(!!action.pressed()));
+    }
+    if (action.badge?.()) {
+      button.classList.add("rui-badge");
     }
     if (action.iconText) {
       // A text glyph instead of an icon (e.g. "Aa" for display settings).
@@ -347,10 +361,46 @@
 
   function renderBars() {
     ui.topStart.replaceChildren(...actionsFor("top-start").map(makeIconButton));
-    ui.topEnd.replaceChildren(...actionsFor("top-end").map(makeIconButton));
+    ui.topEnd.replaceChildren(
+      ...groupZoomButtons(actionsFor("top-end").map(makeIconButton))
+    );
     const dockActions = actionsFor("dock").slice(0, 5);
     ui.dock.style.setProperty("--rui-dock-count", dockActions.length);
     ui.dock.replaceChildren(...dockActions.map(makeDockButton));
+  }
+
+  /**
+   * Puts the zoom buttons in one group. On phones the CSS stacks them in one
+   * narrow column (+ above -) with a small "zoom" label, which frees one
+   * button's width in the top bar; on wider screens they stay side by side.
+   */
+  function groupZoomButtons(buttons) {
+    const zoomOut = buttons.find(b => b.dataset.action === "zoomOut");
+    const zoomIn = buttons.find(b => b.dataset.action === "zoomIn");
+    if (!zoomOut || !zoomIn) {
+      return buttons;
+    }
+    const group = el("div", "rui-zoom", {
+      role: "group",
+      "aria-label": "Zoom",
+    });
+    for (const [button, glyph] of [
+      [zoomOut, "minus"],
+      [zoomIn, "plus"],
+    ]) {
+      // Plain + and - for the small stacked buttons.
+      // Static markup (icons and fixed labels only).
+      // eslint-disable-next-line no-unsanitized/method
+      button.insertAdjacentHTML("beforeend", icon(glyph));
+      button.lastElementChild.classList.add("rui-zoom-glyph");
+    }
+    const label = el("span", "rui-zoom-label", { "aria-hidden": "true" });
+    label.textContent = "zoom";
+    group.append(zoomOut, zoomIn, label);
+    const at = Math.min(buttons.indexOf(zoomOut), buttons.indexOf(zoomIn));
+    const rest = buttons.filter(b => b !== zoomOut && b !== zoomIn);
+    rest.splice(at, 0, group);
+    return rest;
   }
 
   function refreshPressedStates() {
@@ -1286,10 +1336,39 @@
     ui.selbar.replaceChildren(swatches, separator, ...buttons);
   }
 
-  function positionSelectionBar(range) {
+  // Lazy: a bar that is already showing moves only when it would cover the
+  // selected text or the selection has gone well away from it. Moving it
+  // on every change made it jump under the finger while the selection was
+  // being adjusted.
+  const SELBAR_NEAR = 140;
+
+  function selectionBarStillFits(rects) {
+    const bar = ui.selbar.getBoundingClientRect();
+    const margin = 4;
+    if (bar.top < 0 || bar.bottom > window.innerHeight) {
+      return false;
+    }
+    const covers = rects.some(
+      r =>
+        r.left < bar.right + margin &&
+        r.right > bar.left - margin &&
+        r.top < bar.bottom + margin &&
+        r.bottom > bar.top - margin
+    );
+    const top = Math.min(...rects.map(r => r.top));
+    const bottom = Math.max(...rects.map(r => r.bottom));
+    const near =
+      bar.bottom >= top - SELBAR_NEAR && bar.top <= bottom + SELBAR_NEAR;
+    return !covers && near;
+  }
+
+  function positionSelectionBar(range, { lazy = false } = {}) {
     const bar = ui.selbar;
     const rects = [...range.getClientRects()].filter(r => r.width > 0);
     if (!rects.length) {
+      return;
+    }
+    if (lazy && selectionBarStillFits(rects)) {
       return;
     }
     const first = rects[0];
@@ -1320,16 +1399,20 @@
 
   function showSelectionBar(range) {
     storageSet("ruiSelectedOnce", "1");
+    ui.selbar.classList.remove("rui-selbar-busy");
     if (ui.selbar.hidden) {
       renderSelectionBar();
       ui.selbar.hidden = false;
+      positionSelectionBar(range);
+      return;
     }
-    positionSelectionBar(range);
+    positionSelectionBar(range, { lazy: true });
   }
 
   function hideSelectionBar() {
     if (ui.selbar && !ui.selbar.hidden) {
       ui.selbar.hidden = true;
+      ui.selbar.classList.remove("rui-selbar-busy");
     }
   }
 
@@ -1344,23 +1427,41 @@
         lastRangeCollapsedAt = performance.now();
       }
       clearTimeout(timer);
-      // Wait for the selection to settle (handles being dragged).
-      timer = setTimeout(() => {
-        const settled = selectionRangeInBook();
-        if (settled && !sheetOpen) {
-          showSelectionBar(settled);
-        } else {
-          hideSelectionBar();
-        }
-      }, 200);
+      // While the selection is being adjusted the bar stays where it is,
+      // faint and out of the way of the finger (see .rui-selbar-busy).
+      if (!ui.selbar.hidden) {
+        ui.selbar.classList.add("rui-selbar-busy");
+      }
+      // Wait for the selection to settle (handles being dragged); a bar
+      // already showing waits a little longer before it moves.
+      timer = setTimeout(
+        () => {
+          const settled = selectionRangeInBook();
+          if (settled && !sheetOpen) {
+            showSelectionBar(settled);
+          } else {
+            hideSelectionBar();
+          }
+        },
+        ui.selbar.hidden ? 200 : 400
+      );
     });
+    // Scrolling moves the text under the (fixed) bar: follow it, once a
+    // frame at most.
+    let scrollFrame = 0;
     container.addEventListener(
       "scroll",
       () => {
-        const range = !ui.selbar.hidden && selectionRangeInBook();
-        if (range) {
-          positionSelectionBar(range);
+        if (scrollFrame || ui.selbar.hidden) {
+          return;
         }
+        scrollFrame = requestAnimationFrame(() => {
+          scrollFrame = 0;
+          const range = !ui.selbar.hidden && selectionRangeInBook();
+          if (range) {
+            positionSelectionBar(range);
+          }
+        });
       },
       { passive: true }
     );
@@ -1902,9 +2003,13 @@
   let appliedPageTheme = null;
   let keepAwakeLock = null;
 
+  /**
+   * The reader's chosen theme. Light until they choose another, even when
+   * the phone is in dark mode; "System" (follow the phone) is a choice too.
+   */
   function storedTheme() {
     const theme = storageGet("readerTheme");
-    return THEMES.some(t => t.id === theme) ? theme : "system";
+    return THEMES.some(t => t.id === theme) ? theme : "light";
   }
 
   function resolvedTheme() {
@@ -4675,6 +4780,22 @@
       priority: 20,
       run: () => app()?.zoomIn(),
     });
+    registerAction({
+      id: "translate",
+      label: () =>
+        `Read in ${EDITION_LANGS[otherLanguage()] || "the other edition"}`,
+      icon: "translate",
+      placements: ["top-end"],
+      // Last: the extreme top right.
+      priority: 5,
+      elementId: "ruiTranslate",
+      // Only on pages that have a counterpart in the other edition.
+      visible: () => !!editionStretches(currentPage()),
+      pressed: () => edition.on,
+      // Reading a translation (opened from the other edition).
+      badge: () => !!edition.landing.from,
+      run: () => safely(setBands)(!edition.on),
+    });
 
     // More sheet: Share
     registerAction({
@@ -4726,6 +4847,631 @@
   }
 
   // ---------------------------------------------------------------------
+  // Other edition: read this passage in Hindi / English
+  // ---------------------------------------------------------------------
+
+  // Position maps between the English volumes and their Hindi translations
+  // (made in baws-hybrid-index, data/hindi-segments), one file per Hindi
+  // volume, HI_Volume_<N>.json:
+  //   {en: {"EN/Volume_06/20": [[from, to, "HI/Volume_11/17", at], ...]},
+  //    hi: {"HI/Volume_11/17": [[from, to, "EN/Volume_06/20", at], ...]}}
+  // from/to: where the stretch runs on this page, as fractions of the page's
+  // text (0 top, 1 bottom); at: how far down the other page it starts. Page
+  // ids are "<LANG>/<book>/<PDF page>". index.json (made by baws-search
+  // scripts/hindi-segments-index.mjs) says which files can hold an English
+  // page: {v: 1, files: [names], en: {"EN/Volume_10": [[first, last,
+  // file], ...]}}; a Hindi page is always in its own volume's file.
+  //
+  // Where the files are served from is a setting: "segments=<base url>" in
+  // the viewer's address. Inside the app only the app sets it (for now for
+  // beta testers only, see baws-search Book.jsx); a viewer on its own also
+  // reads localStorage.readerSegmentsUrl. No setting, no Translate button.
+  //
+  // Text fractions only approximate places on a PDF page, so the bands
+  // cover whole lines, generously; they never claim to be exact.
+  //
+  // Tapping a band asks the app to open the other edition there
+  // ({action: "openOtherEdition", data: {page, at, from, fromAt}}). The app
+  // changes its address to /books/<parent>/<LANG>/<book>/pdf/<page> with
+  // ?at=&from=&fromAt= (no site reload; the reader opens the other book),
+  // and this reader marks the landing place and offers the way back.
+
+  const EDITION_LANGS = { EN: "English", HI: "Hindi" };
+  const EDITION_CHIP = { EN: "English", HI: "हिंदी" };
+  const PAGE_ID = /^(EN|HI)\/([A-Za-z0-9_]+)\/(\d+)$/;
+  const LANDING_MARK_MS = 2500;
+
+  const edition = {
+    base: segmentsBase(),
+    index: null, // Promise<index.json|null>
+    files: new Map(), // file name -> Promise<data|null>
+    pages: new Map(), // page number -> stretches, or null (looked up)
+    lookups: new Map(), // page number -> Promise (looking up)
+    on: false, // bands showing
+    landing: landingFromUrl(),
+  };
+
+  function segmentsBase() {
+    let value = null;
+    try {
+      value = new URLSearchParams(location.search).get("segments");
+    } catch {}
+    if (window.parent === window) {
+      value ||= storageGet("readerSegmentsUrl");
+    }
+    if (!value) {
+      return null;
+    }
+    try {
+      const url = new URL(value.replace(/\/?$/, "/"), location.href);
+      return /^https?:$/.test(url.protocol) ? url.href : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function landingFromUrl() {
+    const query = new URLSearchParams(location.search);
+    const fraction = name => {
+      const value = parseFloat(query.get(name));
+      return value >= 0 && value <= 1 ? value : null;
+    };
+    const from = query.get("from");
+    const page = /(?:^#|&)page=(\d+)/.exec(location.hash)?.[1];
+    return {
+      at: fraction("at"),
+      from: PAGE_ID.test(from || "") ? from : null,
+      fromAt: fraction("fromAt"),
+      page: page ? Number(page) : null,
+    };
+  }
+
+  function bookLanguage() {
+    return window.getBookUrlData?.()?.language;
+  }
+
+  function otherLanguage() {
+    return { EN: "HI", HI: "EN" }[bookLanguage()];
+  }
+
+  function pageId(pageNumber) {
+    const data = window.getBookUrlData?.();
+    return data && EDITION_LANGS[data.language]
+      ? `${data.language}/${data.bookName}/${pageNumber}`
+      : null;
+  }
+
+  /** "HI/Volume_33/317" -> "Hindi, Volume 33 page 317" */
+  function describePage(id) {
+    const [, lang, book, page] = PAGE_ID.exec(id);
+    const volume = /^Volume_(\d+)(?:_(\d+))?$/.exec(book);
+    const name = volume
+      ? `Volume ${+volume[1]}${volume[2] ? ` part ${+volume[2]}` : ""}`
+      : book.replaceAll("_", " ");
+    return `${EDITION_LANGS[lang]}, ${name} page ${page}`;
+  }
+
+  const SEGMENTS_TIMEOUT_MS = 15000;
+
+  /**
+   * One map file: its data, or null when there is no such file or it isn't
+   * a map (kept, not asked for again). Rejects when the server can't be
+   * reached or is too slow (offline, server down): not kept, so it is
+   * tried again on the next page. Never throws past the caller's catch.
+   */
+  function fetchSegments(name) {
+    if (!edition.files.has(name)) {
+      const options = {};
+      if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) {
+        options.signal = AbortSignal.timeout(SEGMENTS_TIMEOUT_MS);
+      }
+      const loading = fetch(edition.base + name, options)
+        .catch(error => {
+          edition.files.delete(name);
+          throw error;
+        })
+        .then(response => (response.ok ? response.json() : null))
+        // Not JSON (e.g. an HTML error page): no map.
+        .then(
+          data => (data && typeof data === "object" ? data : null),
+          error => {
+            if (!edition.files.has(name)) {
+              throw error; // network: try again later
+            }
+            return null;
+          }
+        );
+      edition.files.set(name, loading);
+    }
+    return edition.files.get(name);
+  }
+
+  function validStretch(stretch, lang) {
+    if (!Array.isArray(stretch)) {
+      return false;
+    }
+    const [from, to, other, at] = stretch;
+    const match = PAGE_ID.exec(other || "");
+    return (
+      from >= 0 &&
+      to <= 1 &&
+      from < to &&
+      at >= 0 &&
+      at <= 1 &&
+      !!match &&
+      match[1] !== lang
+    );
+  }
+
+  async function findStretches(id) {
+    const [, lang, book, pageText] = PAGE_ID.exec(id);
+    const page = Number(pageText);
+    let names = [`HI_${book}.json`];
+    if (lang === "EN") {
+      edition.index ||= fetchSegments("index.json").then(
+        data => {
+          const ok = data?.v === 1 && data.en && Array.isArray(data.files);
+          return ok ? data : null;
+        },
+        error => {
+          edition.index = null; // try again later
+          throw error;
+        }
+      );
+      const index = await edition.index;
+      const runs = index?.en?.[`EN/${book}`];
+      names = (Array.isArray(runs) ? runs : [])
+        .filter(run => Array.isArray(run) && page >= run[0] && page <= run[1])
+        .map(run => index.files[run[2]])
+        .filter(name => /^HI_[A-Za-z0-9_]+\.json$/.test(name || ""));
+    }
+    for (const name of names) {
+      const data = await fetchSegments(name);
+      const pages = data?.[lang.toLowerCase()];
+      const list = pages && typeof pages === "object" ? pages[id] : null;
+      const stretches = Array.isArray(list)
+        ? list.filter(s => validStretch(s, lang))
+        : [];
+      if (stretches.length) {
+        return stretches;
+      }
+    }
+    return null;
+  }
+
+  /** The stretches of a page, if already looked up (else undefined). */
+  function editionStretches(pageNumber) {
+    return edition.pages.get(pageNumber);
+  }
+
+  function lookUpStretches(pageNumber) {
+    if (edition.pages.has(pageNumber)) {
+      return Promise.resolve(edition.pages.get(pageNumber));
+    }
+    const id = edition.base && pageId(pageNumber);
+    if (!id) {
+      return Promise.resolve(null);
+    }
+    if (!edition.lookups.has(pageNumber)) {
+      edition.lookups.set(
+        pageNumber,
+        findStretches(id).then(
+          stretches => {
+            edition.lookups.delete(pageNumber);
+            edition.pages.set(pageNumber, stretches);
+            return stretches;
+          },
+          () => {
+            // Maps not reachable: no Translate button for now; not kept,
+            // so the page is looked up again when the reader comes back.
+            edition.lookups.delete(pageNumber);
+            return null;
+          }
+        )
+      );
+    }
+    return edition.lookups.get(pageNumber);
+  }
+
+  /** Shows or hides the Translate button for the current page. */
+  async function updateTranslateButton() {
+    const page = currentPage();
+    const stretches = await lookUpStretches(page);
+    if (page !== currentPage()) {
+      return;
+    }
+    const shown = !!document.getElementById("ruiTranslate");
+    if (shown !== !!stretches) {
+      renderBars();
+    }
+    if (!stretches && edition.on) {
+      // Nothing to show here, and no button to turn the bands off.
+      setBands(false);
+    }
+  }
+
+  // -- Where a text fraction is on the page ---------------------------------
+
+  /**
+   * A function giving the line that holds a text fraction of the page, as
+   * {top, bottom} fractions of the page's height; null while the page isn't
+   * drawn. Page view uses the PDF's text layer (its lines, top to bottom);
+   * Text view the text itself.
+   */
+  function textPlaces(view) {
+    const box = view.div.getBoundingClientRect();
+    if (!box.height) {
+      return null;
+    }
+    const relative = rect => ({
+      top: (rect.top - box.top) / box.height,
+      bottom: (rect.bottom - box.top) / box.height,
+    });
+
+    if (window.VIEW_MODE === "text") {
+      const text = view.div.querySelector(".textView");
+      if (!text || text.classList.contains("textViewUnavailable")) {
+        return null;
+      }
+      const nodes = [];
+      let total = 0;
+      const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (node.data.trim()) {
+          nodes.push([node, total]);
+          total += node.data.length;
+        }
+      }
+      if (!total) {
+        return null;
+      }
+      const range = document.createRange();
+      return fraction => {
+        const target = Math.min(total - 1, Math.max(0, fraction * total));
+        let i = nodes.length - 1;
+        while (i > 0 && nodes[i][1] > target) {
+          i--;
+        }
+        const [node, start] = nodes[i];
+        const offset = Math.min(
+          node.data.length - 1,
+          Math.floor(target - start)
+        );
+        range.setStart(node, offset);
+        range.setEnd(node, offset + 1);
+        const rect =
+          range.getClientRects()[0] ||
+          node.parentElement.getBoundingClientRect();
+        return relative(rect);
+      };
+    }
+
+    const layer = view.div.querySelector(".textLayer");
+    if (!layer?.querySelector(".endOfContent")) {
+      return null; // not drawn yet
+    }
+    // Lines: the text layer's spans, grouped by their height on the page.
+    const spans = [];
+    for (const span of layer.querySelectorAll("span")) {
+      const rect = span.getBoundingClientRect();
+      if (
+        !span.firstElementChild &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        span.textContent.trim()
+      ) {
+        spans.push({ rect, chars: span.textContent.length });
+      }
+    }
+    spans.sort((a, b) => a.rect.top - b.rect.top);
+    const lines = [];
+    for (const { rect, chars } of spans) {
+      const line = lines.at(-1);
+      if (line && rect.top < line.top + (line.bottom - line.top) * 0.5) {
+        line.bottom = Math.max(line.bottom, rect.bottom);
+        line.chars += chars;
+      } else {
+        lines.push({ top: rect.top, bottom: rect.bottom, chars });
+      }
+    }
+    const total = lines.reduce((sum, line) => sum + line.chars, 0);
+    if (!total) {
+      // A page without text (a scan without a text layer): the text area
+      // of a printed page, roughly.
+      return fraction => {
+        const y = 0.07 + fraction * 0.86;
+        return { top: y - 0.015, bottom: y + 0.015 };
+      };
+    }
+    return fraction => {
+      const target = fraction * total;
+      let seen = 0;
+      for (const line of lines) {
+        seen += line.chars;
+        if (seen > target) {
+          return relative(line);
+        }
+      }
+      return relative(lines.at(-1));
+    };
+  }
+
+  /** {top, bottom} (page fractions) of the lines a stretch runs over. */
+  function stretchBox(place, from, to) {
+    const first = place(from);
+    // The last character inside the stretch, not the first one after it.
+    const last = place(Math.max(from, to - 0.0005));
+    return { top: first.top, bottom: Math.max(first.bottom, last.bottom) };
+  }
+
+  // -- Bands -----------------------------------------------------------------
+
+  function setBands(on) {
+    edition.on = on;
+    if (on) {
+      hideSelectionBar();
+    }
+    for (const view of app().pdfViewer._pages || []) {
+      drawBands(view);
+    }
+    refreshPressedStates();
+  }
+
+  function drawBands(view) {
+    view.div.querySelector(".rui-xl-layer")?.remove();
+    if (!edition.on) {
+      return;
+    }
+    const stretches = editionStretches(view.id);
+    if (!stretches) {
+      if (!edition.pages.has(view.id)) {
+        lookUpStretches(view.id).then(
+          safely(found => found && drawBands(view))
+        );
+      }
+      return;
+    }
+    const place = textPlaces(view);
+    if (!place) {
+      return; // drawn again when the page is (see wireOtherEdition)
+    }
+    const boxes = stretches.map(([from, to]) => stretchBox(place, from, to));
+    // Neighbouring stretches can share a line: they meet half way, so no
+    // band covers another. The outer edges get a little room.
+    for (let i = 1; i < boxes.length; i++) {
+      const prev = boxes[i - 1];
+      const next = boxes[i];
+      if (next.top - prev.bottom < 0.03) {
+        const middle = (prev.bottom + next.top) / 2;
+        prev.bottom = middle;
+        next.top = middle;
+      }
+    }
+    boxes[0].top -= 0.006;
+    boxes.at(-1).bottom += 0.006;
+
+    const layer = el("div", "rui-xl-layer");
+    stretches.forEach(([from, , other, at], i) => {
+      const top = Math.max(0, boxes[i].top);
+      const bottom = Math.min(1, boxes[i].bottom);
+      const band = el("button", "rui-xl-band", {
+        type: "button",
+        "aria-label": `Read this passage in ${describePage(other)}`,
+        title: `Read in ${describePage(other)}`,
+      });
+      band.style.top = `${top * 100}%`;
+      band.style.height = `${Math.max(0.02, bottom - top) * 100}%`;
+      const chip = el("span", "rui-xl-chip", { "aria-hidden": "true" });
+      const [, lang, , page] = PAGE_ID.exec(other);
+      chip.textContent = `${EDITION_CHIP[lang]} · p.${page}`;
+      chip.lang = lang.toLowerCase();
+      band.append(chip);
+      band.addEventListener(
+        "click",
+        safely(() =>
+          openOtherEdition(other, at, { from: pageId(view.id), fromAt: from })
+        )
+      );
+      layer.append(band);
+    });
+    view.div.append(layer);
+  }
+
+  /**
+   * Opens a page of the other edition. Inside the app, the app changes its
+   * address (the site stays loaded; only the reader opens the other book).
+   * On its own, the viewer opens that book itself.
+   */
+  function openOtherEdition(target, at, { from = null, fromAt = null } = {}) {
+    const match = PAGE_ID.exec(target);
+    if (!match) {
+      return;
+    }
+    toast(`Opening ${describePage(target)}…`);
+    if (window.parent !== window) {
+      window.parent.postMessage(
+        JSON.stringify({
+          action: "openOtherEdition",
+          data: { page: target, at, from, fromAt },
+        }),
+        "*"
+      );
+      return;
+    }
+    const [, lang, book, page] = match;
+    const pdf = app().baseUrl.replace(
+      /\/[A-Z]{2}\/[^/]+\.pdf$/,
+      `/${lang}/${book}.pdf`
+    );
+    const query = new URLSearchParams();
+    for (const key of ["ui", "segments"]) {
+      const value = new URLSearchParams(location.search).get(key);
+      if (value) {
+        query.set(key, value);
+      }
+    }
+    query.set("at", String(at));
+    if (from) {
+      query.set("from", from);
+      query.set("fromAt", String(fromAt ?? 0));
+    }
+    // file= last: everything after it is the PDF's address.
+    location.href = `${location.pathname}?${query}&file=${pdf}#page=${page}`;
+  }
+
+  // -- Landing: mark the passage, offer the way back --------------------------
+
+  function markLanding(view) {
+    const { at } = edition.landing;
+    const place = textPlaces(view);
+    if (!place) {
+      return false;
+    }
+    const stretches = editionStretches(view.id) || [];
+    const hit = stretches.find(([from, to]) => at >= from && at < to);
+    const box = hit
+      ? stretchBox(place, hit[0], hit[1])
+      : stretchBox(place, at, Math.min(1, at + 0.08));
+    const top = Math.max(0, box.top - 0.006);
+    const bottom = Math.min(1, box.bottom + 0.006);
+    const mark = el("div", "rui-xl-mark", { "aria-hidden": "true" });
+    mark.style.top = `${top * 100}%`;
+    mark.style.height = `${Math.max(0.02, bottom - top) * 100}%`;
+    view.div.querySelector(".rui-xl-mark")?.remove();
+    view.div.append(mark);
+
+    // The passage a quarter of the way down the screen.
+    const container = document.getElementById("viewerContainer");
+    const page = view.div.getBoundingClientRect();
+    const frame = container.getBoundingClientRect();
+    container.scrollTop +=
+      page.top + top * page.height - (frame.top + frame.height * 0.25);
+
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setTimeout(() => {
+      if (reduced) {
+        mark.remove();
+        return;
+      }
+      mark.classList.add("rui-xl-fade");
+      setTimeout(() => mark.remove(), 900);
+    }, LANDING_MARK_MS);
+    return true;
+  }
+
+  function showBackBar(landingPage) {
+    const { from, fromAt } = edition.landing;
+    if (!from) {
+      return;
+    }
+    const [, lang, , page] = PAGE_ID.exec(from);
+    const bar = el("button", "rui-xl-back", {
+      type: "button",
+      "aria-label": `Back to ${describePage(from)}`,
+    });
+    // Static markup (icons and fixed labels only).
+    // eslint-disable-next-line no-unsanitized/property
+    bar.innerHTML = icon("back") + "<span></span>";
+    bar.querySelector(
+      "span"
+    ).textContent = `Back to ${EDITION_LANGS[lang]}, p.${page}`;
+    bar.addEventListener(
+      "click",
+      safely(() => {
+        bar.remove();
+        openOtherEdition(from, fromAt ?? 0);
+      })
+    );
+    (document.getElementById("outerContainer") || document.body).append(bar);
+    // Until the reader moves a page away.
+    const bus = app().eventBus;
+    const away = e => {
+      if (e.pageNumber !== landingPage) {
+        bar.remove();
+        bus._off("pagechanging", away);
+      }
+    };
+    bus._on("pagechanging", away);
+  }
+
+  /**
+   * Runs a Translate handler so that a failure only turns the feature off
+   * for the moment: an exception thrown in a pdf.js event listener would
+   * stop the listeners after it (page rendering, the rest of the reader).
+   */
+  function safely(fn) {
+    return (...args) => {
+      try {
+        const result = fn(...args);
+        result?.catch?.(error => console.warn("Translate:", error));
+      } catch (error) {
+        console.warn("Translate:", error);
+      }
+    };
+  }
+
+  function wireOtherEdition(a) {
+    if (!edition.base) {
+      return;
+    }
+    const bus = a.eventBus;
+    bus._on("pagechanging", safely(updateTranslateButton));
+    safely(updateTranslateButton)();
+
+    const redraw = safely(e => {
+      const view = a.pdfViewer.getPageView(e.pageNumber - 1);
+      if (view && edition.on) {
+        drawBands(view);
+      }
+    });
+    bus._on("textlayerrendered", redraw);
+    bus._on("pagerendered", e => {
+      // Page view: the text layer comes a little later (textlayerrendered).
+      if (window.VIEW_MODE === "text") {
+        redraw(e);
+      }
+    });
+
+    document.addEventListener(
+      "keydown",
+      safely(event => {
+        if (event.key === "Escape" && edition.on) {
+          setBands(false);
+        }
+      })
+    );
+
+    if (edition.landing.at === null) {
+      return;
+    }
+    const landingPage = edition.landing.page || currentPage();
+    safely(showBackBar)(landingPage);
+    // Mark the passage once the page is there (with its map if it can be
+    // had; without it, the place it starts).
+    lookUpStretches(landingPage)
+      .catch(() => null)
+      .then(() => {
+        let done = false;
+        const tryMark = safely(() => {
+          const view = !done && a.pdfViewer.getPageView(landingPage - 1);
+          if (view) {
+            done = markLanding(view);
+          }
+        });
+        tryMark();
+        const onDrawn = e => {
+          if (e.pageNumber === landingPage) {
+            // After pdf.js has scrolled to the page.
+            setTimeout(tryMark, 50);
+          }
+        };
+        bus._on("textlayerrendered", onDrawn);
+        bus._on("pagerendered", onDrawn);
+      });
+  }
+
+  // ---------------------------------------------------------------------
   // Start-up
   // ---------------------------------------------------------------------
 
@@ -4745,6 +5491,8 @@
     if (outline()) {
       renderTicks();
       updatePageUI();
+      // The side panel may have opened before the outline came.
+      refreshPanel("outline");
     } else if (tries < 60) {
       setTimeout(() => waitForOutline(tries + 1), 1000);
     }
@@ -4814,6 +5562,7 @@
       wireMouseEdges();
       wireWordHelper();
       wireSaveNudge();
+      wireOtherEdition(a);
       // Save shows whether this page is saved (pages change; the app sends
       // the saved list with the highlights).
       a.eventBus._on("pagechanging", refreshPressedStates);
