@@ -4794,7 +4794,12 @@
       pressed: () => edition.on,
       // Reading a translation (opened from the other edition).
       badge: () => !!edition.landing.from,
-      run: () => safely(setBands)(!edition.on),
+      run: safely(() => {
+        setBands(!edition.on);
+        if (edition.on) {
+          editionTip();
+        }
+      }),
     });
 
     // More sheet: Share
@@ -5267,33 +5272,177 @@
       chip.textContent = `${EDITION_CHIP[lang]} · p.${page}`;
       chip.lang = lang.toLowerCase();
       band.append(chip);
-      band.addEventListener(
-        "click",
-        safely(() =>
-          openOtherEdition(other, at, { from: pageId(view.id), fromAt: from })
-        )
-      );
+      wireBand(band, other, at, { from: pageId(view.id), fromAt: from });
       layer.append(band);
     });
     view.div.append(layer);
   }
 
+  // -- New tab or window ------------------------------------------------------
+
+  // In the reader's own language, as the reader is about to switch to it.
+  const EDITION_WORDS = {
+    EN: {
+      tip: "Long press to open in a new tab/window",
+      title: page => `Open English, p.${page}`,
+      tab: "New tab",
+      window: "New window",
+    },
+    HI: {
+      tip: "नए टैब/विंडो में खोलने के लिए देर तक दबाएँ",
+      title: page => `हिंदी, पृष्ठ ${page} खोलें`,
+      tab: "नया टैब",
+      window: "नई विंडो",
+    },
+  };
+  const EDITION_TIP_TIMES = 3;
+  const EDITION_TIP_MS = 3500;
+
+  /** A new tab or window makes sense in a browser, not in the Android app. */
+  function newTabsPossible() {
+    return !inNativeApp();
+  }
+
+  /** On turning the bands on, the first few times: how to keep this page. */
+  function editionTip() {
+    const shown = parseInt(storageGet("ruiTipEditionTabs"), 10) || 0;
+    if (!newTabsPossible() || shown >= EDITION_TIP_TIMES || sheetOpen) {
+      return;
+    }
+    storageSet("ruiTipEditionTabs", String(shown + 1));
+    const lang = otherLanguage();
+    toast(EDITION_WORDS[lang].tip, { timeout: EDITION_TIP_MS });
+    const text = ui.toasts.lastElementChild?.firstElementChild;
+    if (text) {
+      text.lang = lang.toLowerCase();
+    }
+  }
+
+  /**
+   * A band: a tap opens the passage here; a long press (or right click)
+   * asks whether to open it in a new tab or window instead. Ctrl/Cmd+click
+   * and Shift+click do so at once, as for links.
+   */
+  function wireBand(band, other, at, origin) {
+    const here = () => openOtherEdition(other, at, origin);
+    if (!newTabsPossible()) {
+      band.addEventListener("click", safely(here));
+      return;
+    }
+    let timer = null;
+    let start = null;
+    let longPressed = false;
+    const choose = () => {
+      clearTimeout(timer);
+      longPressed = true;
+      chooseNewTab(other, at);
+    };
+    const cancel = () => clearTimeout(timer);
+    band.addEventListener("pointerdown", event => {
+      if (event.button !== 0) {
+        return;
+      }
+      longPressed = false;
+      start = { x: event.clientX, y: event.clientY };
+      clearTimeout(timer);
+      timer = setTimeout(safely(choose), LONG_PRESS_MS);
+    });
+    band.addEventListener("pointermove", event => {
+      // Moving the finger (scrolling) isn't a long press.
+      if (
+        start &&
+        Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10
+      ) {
+        cancel();
+      }
+    });
+    band.addEventListener("pointerup", cancel);
+    // After a long press, lifting the finger would "click" whatever is now
+    // under it: the sheet's backdrop, which would close the sheet at once.
+    band.addEventListener("touchend", event => {
+      if (longPressed && event.cancelable) {
+        event.preventDefault();
+      }
+    });
+    band.addEventListener("pointerleave", cancel);
+    band.addEventListener("pointercancel", cancel);
+    // Some phones report a long press as a context menu, before our timer.
+    band.addEventListener("contextmenu", event => {
+      event.preventDefault();
+      if (!sheetOpen) {
+        safely(choose)();
+      }
+    });
+    band.addEventListener(
+      "click",
+      safely(event => {
+        if (longPressed) {
+          longPressed = false;
+          return;
+        }
+        if (event.ctrlKey || event.metaKey) {
+          openOtherEdition(other, at, { open: "tab" });
+        } else if (event.shiftKey) {
+          openOtherEdition(other, at, { open: "window" });
+        } else {
+          here();
+        }
+      })
+    );
+  }
+
+  function chooseNewTab(other, at) {
+    const [, lang, , page] = PAGE_ID.exec(other);
+    const words = EDITION_WORDS[lang];
+    openSheet(words.title(page), body => {
+      body.closest(".rui-sheet").lang = lang.toLowerCase();
+      const list = el("div", "rui-jump");
+      for (const open of ["tab", "window"]) {
+        const row = el("button", "rui-jump-row", { type: "button" });
+        const text = el("span", "rui-jump-text");
+        const name = el("span", "rui-jump-title");
+        name.textContent = words[open];
+        text.append(name);
+        row.append(text);
+        row.addEventListener(
+          "click",
+          safely(() => {
+            closeSheet(true);
+            openOtherEdition(other, at, { open });
+          })
+        );
+        list.append(row);
+      }
+      body.append(list);
+    });
+  }
+
   /**
    * Opens a page of the other edition. Inside the app, the app changes its
    * address (the site stays loaded; only the reader opens the other book).
-   * On its own, the viewer opens that book itself.
+   * On its own, the viewer opens that book itself. With `open` "tab" or
+   * "window", it opens there and this page stays as it is (so no way back
+   * is needed there).
    */
-  function openOtherEdition(target, at, { from = null, fromAt = null } = {}) {
+  function openOtherEdition(
+    target,
+    at,
+    { from = null, fromAt = null, open = null } = {}
+  ) {
     const match = PAGE_ID.exec(target);
     if (!match) {
       return;
     }
-    toast(`Opening ${describePage(target)}…`);
+    if (open) {
+      from = null;
+    } else {
+      toast(`Opening ${describePage(target)}…`);
+    }
     if (window.parent !== window) {
       window.parent.postMessage(
         JSON.stringify({
           action: "openOtherEdition",
-          data: { page: target, at, from, fromAt },
+          data: { page: target, at, from, fromAt, open },
         }),
         "*"
       );
@@ -5317,7 +5466,23 @@
       query.set("fromAt", String(fromAt ?? 0));
     }
     // file= last: everything after it is the PDF's address.
-    location.href = `${location.pathname}?${query}&file=${pdf}#page=${page}`;
+    const url = `${location.pathname}?${query}&file=${pdf}#page=${page}`;
+    if (open) {
+      openNewTab(url, open);
+    } else {
+      location.href = url;
+    }
+  }
+
+  /** "tab": a new tab; "window": a window of its own, near this one's size. */
+  function openNewTab(url, open) {
+    if (open === "window") {
+      const width = Math.min(window.outerWidth || 900, 1100);
+      const height = window.outerHeight || 800;
+      window.open(url, "_blank", `popup,width=${width},height=${height}`);
+    } else {
+      window.open(url, "_blank");
+    }
   }
 
   // -- Landing: mark the passage, offer the way back --------------------------

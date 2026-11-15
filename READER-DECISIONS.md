@@ -203,10 +203,24 @@ screens).
 - **Fractions are approximate**: bands cover whole lines and are drawn
   generously; neighbouring stretches meet half way. A page without a text
   layer falls back to the printed text area.
-- **Beta testers only for now (2026-11-14).** The app passes the maps'
-  address to the reader only when `user.isBetaTester` (Profile → Beta
-  Tester); inside the app the reader takes it from the app alone, so no
-  one else sees the Translate button.
+- **Beta testers only at first (2026-11-14);** baws-search 7cee3e5 then
+  opened it to every reader. Inside the app the reader still takes the
+  maps' address from the app alone.
+- **New tab or window (2026-11-14).** A tap on a band opens the passage
+  here, as before. A long press (600 ms, or a right click) opens a sheet,
+  "New tab" / "New window", in the target edition's language; Ctrl/Cmd+
+  click and Shift+click do so at once, as for links. The message gets
+  `open: "tab" | "window"` and no `from` (this page stays open, so no Back
+  bar there); Book.jsx calls `window.open` on the site's book route (the
+  tap carries over to the parent, so it isn't blocked as a pop-up; if it
+  is, it opens here). The band's size there comes from the new page's own
+  map (the stretch holding `at`), as for a tap. Turning the bands on shows
+  a short tip (3.5 s) in the target language, "Long press to open in a
+  new tab/window" / "नए टैब/विंडो में खोलने के लिए देर तक दबाएँ", the first 3
+  times only (`ruiTipEditionTabs`). Not in the Android app (no tabs
+  there): no tip, a long press does nothing special. After a long press
+  the touch's own click is cancelled, or it would land on the sheet's
+  backdrop and close it.
 - **Where the maps are served from is a setting** (publishing is a
   separate step needing the owner's OK): `segments=<base url>` in the
   reader's address, which the app adds from `REACT_APP_HINDI_SEGMENTS_URL`
