@@ -35,6 +35,10 @@
     /iP(hone|od|ad)/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
+  // Phones and tablets (iOS, Android, the app): at the normal size the page
+  // stays put with its text in the middle; see wireTextCentering().
+  const CENTRES_TEXT = IS_IOS || matchMedia("(pointer: coarse)").matches;
+
   // Lucide-style 24px stroke icons.
   const ICONS = {
     back: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
@@ -547,7 +551,7 @@
   // (zoomed in); up to it, only its white margins are cut off.
   const PAN_MIN_OVERFLOW = 0.2;
 
-  /** Whether the view pans sideways (zoomed in), on iOS; see canTurn(). */
+  /** Whether the view pans sideways (zoomed in); see canTurn(). */
   function pansSideways(container) {
     const overflow = container.scrollWidth - container.clientWidth;
     return overflow > container.clientWidth * PAN_MIN_OVERFLOW;
@@ -573,14 +577,16 @@
   }
 
   /**
-   * iOS: at the normal size the page is a little wider than the screen (its
-   * white margins are cut off). Swipes there turn pages, so the page doesn't
-   * pan sideways and its text is kept in the middle: book pages have the
-   * wider margin on the outside, so centring the paper would cut off text.
-   * Zoomed in, it pans as usual.
+   * Touch screens: at the normal size the page is a little wider than the
+   * screen (its white margins are cut off). Swipes there turn pages, so the
+   * page doesn't pan sideways and its text is kept in the middle: book pages
+   * have the wider margin on the outside (left or right, odd or even page),
+   * so centring the paper would cut off text. Zoomed in, it pans as usual.
+   * First on iOS; on Android (2026-11-15) the page a book opened at was
+   * scrolled to its right edge by pdf.js, cutting off the start of each line.
    */
-  function wireIosCentering(container, a) {
-    if (!IS_IOS) {
+  function wireTextCentering(container, a) {
+    if (!CENTRES_TEXT) {
       return;
     }
     const update = () => {
@@ -658,10 +664,11 @@
 
     // Whether a sideways swipe (dx < 0: to the left) turns the page now.
     // When zoomed in, a swipe scrolls first and turns the page only once the
-    // view is at that edge. On iOS, near the normal size, it always turns the
-    // page: there the swipe would otherwise scroll the cropped margins.
+    // view is at that edge. On touch screens, near the normal size, it always
+    // turns the page: there the swipe would otherwise scroll the cropped
+    // margins.
     const canTurn = dx => {
-      if (IS_IOS && !pansSideways(container)) {
+      if (CENTRES_TEXT && !pansSideways(container)) {
         return true;
       }
       const atRight =
@@ -5792,7 +5799,7 @@
       const container = document.getElementById("viewerContainer");
       wireScrollHiding(container);
       wireGestures(container);
-      wireIosCentering(container, a);
+      wireTextCentering(container, a);
       wireSelectionBar(container);
       wirePlayer();
       wireNotebook();

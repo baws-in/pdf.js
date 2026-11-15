@@ -311,7 +311,8 @@ html.rui body {
   overscroll-behavior-x: none;
 }
 
-/* iOS at the normal size: the page stays centred (see wireIosCentering). */
+/* Touch screens at the normal size: the text stays centred (see
+   wireTextCentering). */
 html.rui.rui-no-pan #viewerContainer {
   overflow-x: hidden;
 }
