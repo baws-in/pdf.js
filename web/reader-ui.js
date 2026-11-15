@@ -5355,6 +5355,39 @@
       layer.append(band);
     });
     view.div.append(layer);
+    keepChipsInView();
+  }
+
+  /**
+   * On phones the page is wider than the screen (its margins are cut off),
+   * so the labels ("हिंदी · p.27") keep to the visible part of the page,
+   * not the paper's edge, as the page scrolls sideways.
+   */
+  let chipsWired = false;
+  function keepChipsInView() {
+    const container = document.getElementById("viewerContainer");
+    const place = () => {
+      const right = container.getBoundingClientRect().right;
+      for (const layer of container.querySelectorAll(".rui-xl-layer")) {
+        const hidden = layer.getBoundingClientRect().right - right;
+        layer.style.setProperty(
+          "--rui-xl-hidden-right",
+          `${Math.max(0, Math.round(hidden))}px`
+        );
+      }
+    };
+    place();
+    if (chipsWired) {
+      return;
+    }
+    chipsWired = true;
+    let frame = 0;
+    const later = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(place);
+    };
+    container.addEventListener("scroll", later, { passive: true });
+    window.addEventListener("resize", later);
   }
 
   // -- New tab or window ------------------------------------------------------

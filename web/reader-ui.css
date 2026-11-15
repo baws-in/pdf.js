@@ -2419,7 +2419,8 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
 .rui-xl-chip {
   position: absolute;
   top: 4px;
-  right: 6px;
+  /* Inside the visible part of the page (keepChipsInView). */
+  right: calc(6px + var(--rui-xl-hidden-right, 0px));
   padding: 1px 7px;
   border-radius: 6px;
   background: var(--rui-xl-chip-bg);
