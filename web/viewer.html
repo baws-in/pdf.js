@@ -31,11 +31,14 @@ See https://github.com/adobe-type-tools/cmap-resources
     <title>PDF.js viewer</title>
     <script>
       // New reader UI (reader-ui.js) behind a flag: "ui=2" in the query or
-      // hash, or localStorage.readerUI = "2" for testing.
+      // hash, or localStorage.readerUI = "2" for testing. "ui=1" asks for
+      // the classic reader whatever is saved (the app, for this visit only).
       (function () {
-        var on = /(?:^|[?&#])ui=2(?:[&#]|$)/.test(location.search + location.hash);
+        var address = location.search + location.hash;
+        var on = /(?:^|[?&#])ui=2(?:[&#]|$)/.test(address);
+        var classic = /(?:^|[?&#])ui=1(?:[&#]|$)/.test(address);
         try {
-          on = on || localStorage.getItem("readerUI") === "2";
+          on = on || (!classic && localStorage.getItem("readerUI") === "2");
         } catch (e) {}
         window.BAWS_READER_UI = on ? 2 : 1;
         if (on) {

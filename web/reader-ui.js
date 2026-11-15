@@ -3694,7 +3694,14 @@
   // moment they help. More → Tour replays the tour.
 
   const TIP_AFTER_PAGES = 10;
-  const tour = { spot: null, card: null, cleanup: null, index: 0, view: null };
+  const tour = {
+    spot: null,
+    card: null,
+    cleanup: null,
+    steps: [],
+    index: 0,
+    view: null,
+  };
 
   function touchScreen() {
     return matchMedia("(pointer: coarse)").matches;
@@ -3743,7 +3750,8 @@
    * @param {Object} view
    * @param {function} [view.target] - returns an element, elements or a rect
    * @param {string} view.title
-   * @param {string} view.text
+   * @param {string|Array<string|{icon: string, name: string}>} view.text -
+   *   text, or text with toolbar icons in it (drawn as on the toolbar)
    * @param {string} [view.step] - e.g. "1 of 4"
    * @param {string} [view.place] - "top" or "bottom"; else near the target
    * @param {Array<Object>} view.actions - {label, run, primary}
@@ -3768,7 +3776,21 @@
     const title = el("h2", "rui-tour-title");
     title.textContent = view.title;
     const text = el("p", "rui-tour-text");
-    text.textContent = view.text;
+    for (const part of [view.text].flat()) {
+      if (typeof part === "string") {
+        text.append(part);
+        continue;
+      }
+      // A toolbar icon, as on its button; its name for screen readers.
+      const glyph = el("span", "rui-tour-icon");
+      // Static markup (icons only).
+      // eslint-disable-next-line no-unsanitized/property
+      glyph.innerHTML = icon(part.icon);
+      const name = el("span", "rui-visually-hidden");
+      name.textContent = part.name;
+      glyph.append(name);
+      text.append(glyph);
+    }
     const row = el("div", "rui-tour-actions");
     if (view.step) {
       const step = el("span", "rui-tour-step");
@@ -3878,7 +3900,11 @@
           "it.",
       stacked: true,
       actions: [
-        { label: "Show me 4 hidden things", primary: true, run: startTour },
+        {
+          label: `Show me ${tourSteps().length} hidden things`,
+          primary: true,
+          run: startTour,
+        },
         { label: "Start reading", run: endTour },
       ],
     });
@@ -3890,8 +3916,21 @@
     endTour();
     closeSheet(true);
     closeDefinition();
+    tour.steps = tourSteps();
     tour.index = 0;
     showTourStep();
+  }
+
+  /** The steps for this book: Translate only where the maps can be had. */
+  function tourSteps() {
+    return TOUR_STEPS.filter(
+      step => step !== translateStepEntry || !!edition.base
+    );
+  }
+
+  /** "2 of 5" */
+  function tourStepLabel() {
+    return `${tour.index + 1} of ${tour.steps.length}`;
   }
 
   function nextTourStep() {
@@ -3905,7 +3944,7 @@
   }
 
   function showTourStep() {
-    const step = TOUR_STEPS[tour.index];
+    const step = tour.steps[tour.index];
     if (!step) {
       endTour();
       return;
@@ -3918,7 +3957,7 @@
     // 1. Highlighting: wait until something is selected, then show the bar.
     () => {
       showTourCard({
-        step: "1 of 4",
+        step: tourStepLabel(),
         title: "Highlight a passage",
         text: touchScreen()
           ? "Try it: press and hold a word on the page, then drag to select " +
@@ -3954,7 +3993,7 @@
       }
       buttons.push({ label: "Next", primary: true, run: nextTourStep });
       showTourCard({
-        step: "2 of 4",
+        step: tourStepLabel(),
         title: words ? "Harder words, underlined" : "Make it easier to read",
         text: words
           ? "Aa can underline the harder words on every page; tap one to " +
@@ -3969,7 +4008,7 @@
     // 3. The More tools.
     () => {
       showTourCard({
-        step: "3 of 4",
+        step: tourStepLabel(),
         title: "More tools",
         text:
           "More has Fullscreen, Go to page, the Notebook, and sharing this " +
@@ -3984,10 +4023,12 @@
         ],
       });
     },
-    // 4. Listen and Save.
+    // 4. Translate (books with an edition in the other language).
+    () => translateTourStep(),
+    // 5. Listen and Save.
     () => {
       showTourCard({
-        step: "4 of 4",
+        step: tourStepLabel(),
         title: "Listen and Save",
         text:
           "Listen reads the book aloud, page after page. Save keeps this " +
@@ -4000,12 +4041,45 @@
       });
     },
   ];
+  // The Translate step's entry, so tourSteps() can leave it out.
+  const translateStepEntry = TOUR_STEPS[3];
+
+  /**
+   * Translate: on a page with a counterpart, the spotlight is on the button;
+   * elsewhere the button isn't there, so the text shows what it looks like.
+   */
+  function translateTourStep() {
+    const lang = EDITION_LANGS[otherLanguage()];
+    const button = document.getElementById("ruiTranslate");
+    const how =
+      "tap it to mark the passages on the page, then tap one to read it " +
+      `in ${lang}.` +
+      (newTabsPossible()
+        ? " Long press a passage to open it in a new tab or window."
+        : "");
+    showTourCard({
+      step: tourStepLabel(),
+      title: `Read it in ${lang}`,
+      text: button
+        ? `Translate opens this passage in the ${lang} edition: ${how}`
+        : [
+            `On pages that are also in the ${lang} edition, `,
+            { icon: "translate", name: "Translate" },
+            ` appears at the top right: ${how}`,
+          ],
+      target: button ? () => document.getElementById("ruiTranslate") : null,
+      actions: [
+        { label: "Skip tour", run: endTour },
+        { label: "Next", primary: true, run: nextTourStep },
+      ],
+    });
+  }
 
   /** Step 1, second half: point at the colours once text is selected. */
   function showSelectionStep() {
     const textView = window.VIEW_MODE === "text";
     showTourCard({
-      step: "1 of 4",
+      step: tourStepLabel(),
       title: textView ? "Define, Share or Copy" : "Tap a colour to highlight",
       text: textView
         ? "Save (below) keeps this page with the passage you selected. " +
@@ -4234,7 +4308,7 @@
   // ---------------------------------------------------------------------
   //
   // "Print" (More → Share) prints this page, the next five or the rest of
-  // the chapter (at most PRINT_MAX_PAGES), each on its own sheet and drawn
+  // the chapter (all of it), each on its own sheet and drawn
   // afresh from the PDF at print resolution, so nothing on screen comes
   // along (no word underlines, no controls). Optionally each page gets its
   // QR code (as in the share image) and the reader's highlights. The pages
@@ -4242,7 +4316,7 @@
   // offers two-sided printing.
 
   const PRINT_SCALE = 3; // 216 dpi
-  const PRINT_MAX_PAGES = 20;
+  const PRINT_MAX_PAGES = 20; // "N pages from here"; a chapter has no limit
   const PRINT_NEXT = 5;
   // Highlight colours on paper (as on screen, a little stronger).
   const PRINT_HIGHLIGHTS = {
@@ -4262,18 +4336,19 @@
 
   /**
    * The pages to print: "this" page, `count` pages from here ("pages"), or
-   * the rest of the chapter ("chapter"); never more than PRINT_MAX_PAGES.
+   * the whole rest of the chapter ("chapter"); `count` is at most
+   * PRINT_MAX_PAGES.
    */
   function printRange(choice, count = PRINT_NEXT) {
     const first = currentPage();
     let last = first;
     if (choice === "pages") {
-      last = first + count - 1;
+      last = first + Math.min(count, PRINT_MAX_PAGES) - 1;
     } else if (choice === "chapter") {
       const end = outlinePath(first).at(-1)?.end;
       last = end >= first ? end : first;
     }
-    last = Math.min(last, first + PRINT_MAX_PAGES - 1, pagesCount());
+    last = Math.min(last, pagesCount());
     return { first, last };
   }
 
@@ -4356,9 +4431,6 @@
         const sheets = last - first + 1;
         let text = first === last ? `Page ${first}` : `Pages ${first}–${last}`;
         text += ` · ${sheets} sheet${sheets === 1 ? "" : "s"}`;
-        if (choice === "chapter" && chapterLeft > PRINT_MAX_PAGES) {
-          text += ` (the first ${PRINT_MAX_PAGES} pages of the chapter)`;
-        }
         if (choice === "pages" && first + count - 1 > pagesCount()) {
           text += " (to the end of the book)";
         }
@@ -5664,6 +5736,7 @@
   }
 
   function startReaderUi() {
+    keepOldSidebarClosed();
     registerBuiltInActions();
     buildChrome();
     wireDisplaySettings();
@@ -5744,6 +5817,56 @@
     });
 
     document.addEventListener("baws:speakingchange", refreshPressedStates);
+  }
+
+  // ---------------------------------------------------------------------
+  // The classic reader's sidebar
+  // ---------------------------------------------------------------------
+
+  // pdf.js reopens its own sidebar (Contents, thumbnails) when it remembers
+  // it open for a book (pdfjs.history, written by the classic reader) or the
+  // PDF asks for it. The new reader hides the toolbar holding its close
+  // button and has its own Notebook, so that sidebar would sit over the page
+  // for good: never open it here, and forget it was open.
+  const SIDEBAR_NONE = 0; // pdf.js SidebarView.NONE
+
+  function forgetOldSidebar() {
+    try {
+      const history = JSON.parse(localStorage.getItem("pdfjs.history"));
+      const files = Array.isArray(history?.files) ? history.files : [];
+      if (files.some(file => file?.sidebarView)) {
+        for (const file of files) {
+          if (file?.sidebarView) {
+            file.sidebarView = SIDEBAR_NONE;
+          }
+        }
+        localStorage.setItem("pdfjs.history", JSON.stringify(history));
+      }
+    } catch {
+      // No storage, or not ours to read: closing it below still works.
+    }
+  }
+
+  function keepOldSidebarClosed() {
+    // Before the book opens: not the remembered view, not the PDF's own.
+    const setOption = () =>
+      window.PDFViewerApplicationOptions?.set(
+        "sidebarViewOnLoad",
+        SIDEBAR_NONE
+      );
+    setOption();
+    document.addEventListener("webviewerloaded", setOption, { once: true });
+    forgetOldSidebar();
+
+    whenViewerReady(a => {
+      const close = () => {
+        if (a.pdfSidebar?.isOpen) {
+          a.pdfSidebar.close(); // also saves "closed" for this book
+        }
+      };
+      close();
+      a.eventBus._on("sidebarviewchanged", () => setTimeout(close));
+    });
   }
 
   window.BawsReaderUI = {

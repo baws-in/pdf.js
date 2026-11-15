@@ -65,6 +65,22 @@ no offline start, no fallback.
     only. The extra toolbar button was removed (two buttons was one too
     many, and it didn't fit on phones).
   - New reader: More → "Classic reader".
+  - **The classic choice lasts 3 days (2026-11-15).** Readers were stuck
+    on the classic reader after picking it once when a book was slow to
+    load. The app (baws-search `src/util/readerChoice.js`) dates the
+    choice (`readerUISince`) and forgets it after 3 days; an undated one
+    (saved before this) counts as old, so today's classic readers get the
+    new reader on their next book. "The reader isn't loading → Use the
+    classic reader" lasts only for that visit (sessionStorage), never
+    saved. The app asks for the classic reader with `ui=1`, which
+    viewer.html honours over a saved `readerUI = "2"`.
+- **No classic sidebar in the new reader (2026-11-15).** pdf.js reopened
+  its own sidebar when it remembered it open for a book (`pdfjs.history`,
+  from the classic reader) or the PDF asked for it; the new reader hides
+  its close button, so it covered the page for good. The new reader sets
+  `sidebarViewOnLoad` to none, closes it if it opens, clears the
+  remembered sidebar for every book, and hides the classic sidebar and
+  secondary toolbar.
 - **More sheet groups**:
   - Reading: Notebook, Go to page, Fullscreen, Classic reader.
   - Share: Page image, QR code, Copy link, Print.
@@ -245,6 +261,14 @@ Welcome card, a 4-step "try it" tour, one-time tips, and More → Tour. Tour
 texts must only describe what really exists (an invented "Listen from
 selection" was removed). Possible later: a "Things to try" checklist.
 
+- **Translate step (2026-11-15)**, 4th of 5, before Listen and Save, only
+  where the position maps can be had (else a 4-step tour; the welcome's
+  "Show me N hidden things" and the "2 of 5" labels count the steps). On a
+  page with a counterpart the spotlight is on the button; elsewhere the
+  button isn't there, so the text shows its icon inline (named
+  "Translate" for screen readers). Mentions the long press for a new tab
+  except in the Android app.
+
 ### Citations (2026-10-12)
 
 - Display only in the reader (More → Citation); the reader calls
@@ -264,6 +288,11 @@ selection" was removed). Possible later: a "Things to try" checklist.
 - More → Share → Print. Choices: **This page**, **[N] pages from here**
   (typed number, 1–20), **Rest of chapter** (greyed out on the chapter's
   last page). Three balanced options; "Next 5" became a typed number.
+- **Rest of chapter prints the whole chapter (2026-11-15).** It used to
+  stop after 20 pages, which looked broken on longer chapters. Pages are
+  fetched from the PDF as needed (not only those on screen); a 46-page
+  chapter took about 8 s per 20 pages on a desktop. The typed number
+  stays 1–20.
 - Switches: **QR code on each page** and **Keep my highlights**.
 - Each page is drawn fresh from the PDF at 3×, so no word underlines or
   controls come along; one page per sheet; tip about two-sided printing.

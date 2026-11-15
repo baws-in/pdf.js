@@ -286,8 +286,17 @@ html.rui.text-mode .pdfViewer .textView.textViewUnavailable {
 /* ---------- Replace the old chrome ---------- */
 
 html.rui .toolbar,
-html.rui #bawsBottomBar {
+html.rui #bawsBottomBar,
+html.rui #sidebarContainer,
+html.rui #secondaryToolbar,
+html.rui #tryNewReaderRow {
   display: none !important;
+}
+
+/* The classic sidebar never shows here (see keepOldSidebarClosed): the page
+   keeps the whole width even for the moment before pdf.js closes it. */
+html.rui #outerContainer.sidebarOpen #viewerContainer {
+  inset-inline-start: 0 !important;
 }
 
 html.rui #viewerContainer {
@@ -2106,6 +2115,25 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   font-size: 15px;
   line-height: 1.45;
   color: var(--rui-ink-2);
+}
+
+/* A toolbar icon in the tour's text (its button may not be on screen). */
+.rui-tour-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7em;
+  height: 1.5em;
+  margin: 0 0.1em;
+  vertical-align: -0.4em;
+  border-radius: 6px;
+  background: var(--rui-tile);
+  color: var(--rui-ink);
+}
+
+.rui-tour-icon .rui-icon {
+  width: 1.15em;
+  height: 1.15em;
 }
 
 .rui-tour-actions {
