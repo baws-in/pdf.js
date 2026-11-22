@@ -678,6 +678,16 @@ function dropVerseNumbers(str) {
       ""
     );
 }
+// The printer's slug line at a page's top ("z:\ ambedkar\vol-011\vol11-04.indd MK
+// SJ+YS 5-10-2013/YS-18-11-2013", EN Vols 2, 4, 8, 11…) is never read: taken out of
+// the page's text before it is cut into pieces (its dashes would cut it up). It
+// stands between two copies of the page number; one is kept, as before.
+const SLUG = String.raw`[a-z]:\\[^\n]{0,80}?\.indd(?:\s+[A-Z+]{2,})*(?:\s+[\dA-Z\/-]*\d{4})?`;
+function dropSlugLines(str) {
+  return str
+    .replace(new RegExp(String.raw`\b(\d{1,4})\s+${SLUG}\s+\1\b`, "gi"), "$1")
+    .replace(new RegExp(SLUG, "gi"), " ");
+}
 function cleanTextForSpeech(str) {
   if (!str) return "";
   if (skipVerseNumbers()) str = dropVerseNumbers(str);
@@ -1081,7 +1091,7 @@ async function selectRangeForReading() {
               "gmu"
             );
 
-            var textArr = strBuf.join("").split(regex);
+            var textArr = dropSlugLines(strBuf.join("")).split(regex);
 
             audioMeta.currentPara = 0;
             audioMeta.currentPage =
