@@ -1805,6 +1805,8 @@
         '<select class="rui-select" data-rui="voice"></select></label>' +
         '<label class="rui-option"><span class="rui-option-label">Sleep timer</span>' +
         '<select class="rui-select" data-rui="sleep"></select></label>' +
+        '<label class="rui-option"><span class="rui-option-label">Skip verse numbers</span>' +
+        '<input type="checkbox" data-rui="skipNumbers"></label>' +
         "</div>";
       const q = name => body.querySelector(`[data-rui="${name}"]`);
       q("prevPage").addEventListener("click", () => playerPage("prev"));
@@ -1822,6 +1824,21 @@
         sleep.append(node);
       }
       sleep.addEventListener("change", () => setSleep(sleep.value));
+
+      // Verse numbers ("1.", "2." before each verse of The Buddha and His Dhamma) left
+      // out of what is read: the engine's setting (viewer-flexi.js), kept per book.
+      const skipNumbers = q("skipNumbers");
+      skipNumbers.checked = !!window.skipVerseNumbers?.();
+      skipNumbers.addEventListener("change", () => {
+        window.setPdfMeta?.({ skipVerseNumbers: skipNumbers.checked });
+        const source = document.getElementById("skipVerseNumbers");
+        if (source) {
+          source.checked = skipNumbers.checked;
+        }
+        if (isSpeaking()) {
+          window.restartCurrentSentence?.();
+        }
+      });
 
       const voice = q("voice");
       voice.addEventListener("change", () => {

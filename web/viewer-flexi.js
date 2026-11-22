@@ -303,6 +303,11 @@ onDomReady(function () {
     ?.addEventListener("change", function () {
       storeSelectedAudio(this.value);
     });
+  document
+    .getElementById("skipVerseNumbers")
+    ?.addEventListener("change", function () {
+      setPdfMeta({ skipVerseNumbers: this.checked });
+    });
 
   startWatching();
 });
@@ -645,8 +650,37 @@ function getChildNodeLenght(contentNode) {
       : 0;
   return no;
 }
+// Verse and item numbers are not read (owner, 2026-11-22): in The Buddha and His
+// Dhamma (EN Vol 11, HI Vol 22) every verse starts with its number ("1. Whenever
+// any phenomenon occurs…", "18. ‘‘शील…"), and hearing "one", "two", "three"
+// before each is tiring. On by default for those two books, off elsewhere, where
+// a number can matter (the Draft Constitution's clauses, numbered questions);
+// the reader can switch it in the voice panel, remembered per book.
+const VERSE_BOOKS = /\/EN\/Volume_11(?!\d)|\/HI\/Volume_22(?!\d)/;
+function skipVerseNumbers() {
+  const stored = getPdfMeta().skipVerseNumbers;
+  if (typeof stored === "boolean") return stored;
+  return VERSE_BOOKS.test(window.PDFViewerApplication?.baseUrl || "");
+}
+// A number of 1-3 digits (Latin or Devanagari) with its dot or bracket, at the
+// start of a piece or just after a sentence's end, and a "§" before it. Years and
+// pages inside a sentence ("in 1956", "p. 12") stay.
+function dropVerseNumbers(str) {
+  return str
+    // (At a page's top the printed page number comes first, "271 18. ‘‘शील…",
+    // HI Vol 22 p.300: the page number stays, as read aloud before.)
+    .replace(/^(\s*(?:[\d०-९]{1,4}\s+)?)(?:§\s*)?[\d०-९]{1,3}\s*[.)](?=\s|$)\s*/u, "$1")
+    .replace(/([.?!।”"’)\]])\s+(?:§\s*)?[\d०-९]{1,3}\s*[.)](?=\s)/gu, "$1")
+    // The first verse after a heading ends the heading's piece ("…is Not— Dhamma
+    // 1."); a reference ("chapter 3.", "Article 15.") keeps its number.
+    .replace(
+      /(?<!\b(?:chapter|chap|page|pages|p|pp|article|art|section|sec|clause|rule|verse|no|vol|volume|para|part|book|year|sutta|अध्याय|पृष्ठ|अनुच्छेद|खंड|भाग|धारा|नियम)\.?)\s+(?:§\s*)?[\d०-९]{1,3}\s*[.)]\s*$/iu,
+      ""
+    );
+}
 function cleanTextForSpeech(str) {
   if (!str) return "";
+  if (skipVerseNumbers()) str = dropVerseNumbers(str);
   str = str.replace(/\*/g, "");
   str = str.replace(/ Manusmriti /g, " मनुस्मृति ");
   str = str.replace(/ Smriti /g, " स्मृति ");
@@ -668,6 +702,9 @@ function cleanTextForSpeech(str) {
 }
 
 function updateVoiceSelector() {
+  // The book is known by now: show its verse-number choice.
+  const skipBox = document.getElementById("skipVerseNumbers");
+  if (skipBox) skipBox.checked = skipVerseNumbers();
   const selectVoices = document.getElementById("selectVoices");
   if (selectVoices) {
     selectVoices.replaceChildren(); // Clear the dropdown
@@ -892,7 +929,8 @@ async function startNodeReading(contentNode, startIndex) {
         var toRead = contentNode[i];
         let currentReadIndex = i;
 
-        if (toRead.match(garbage_regex)) {
+        // (A piece that is only a verse number, "2.", is nothing to read.)
+        if (toRead.match(garbage_regex) && cleanTextForSpeech(toRead).match(garbage_regex)) {
           // Marks the sentence being read on the page. Not in Text view:
           // the find scrolls to the match in the PDF's text, which makes
           // the reflowed text jump around.
