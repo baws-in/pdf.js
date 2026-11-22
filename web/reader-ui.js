@@ -407,14 +407,28 @@
     return rest;
   }
 
+  /** Pressed states, and labels that follow them ("Save" / "Saved"). */
   function refreshPressedStates() {
     for (const action of actions.values()) {
       if (!action.pressed || !action.elementId) {
         continue;
       }
-      document
-        .getElementById(action.elementId)
-        ?.setAttribute("aria-pressed", String(!!action.pressed()));
+      const button = document.getElementById(action.elementId);
+      if (!button) {
+        continue;
+      }
+      button.setAttribute("aria-pressed", String(!!action.pressed()));
+      if (typeof action.label !== "function") {
+        continue;
+      }
+      const label = labelOf(action);
+      const text = button.querySelector(".rui-dock-btn > span");
+      if (text) {
+        text.textContent = label;
+      } else {
+        button.setAttribute("aria-label", label);
+        button.title = label;
+      }
     }
   }
 
@@ -2543,8 +2557,9 @@
   function toggleSavedPage() {
     const page = currentPage();
     const before = window.findSavedPage?.(page);
-    const passage = selectedPassage();
-    if (before && !passage) {
+    // "Saved": a tap takes the page out of Saved for later (owner,
+    // 2026-11-21), even with a passage selected.
+    if (before) {
       window.removeHighlight?.(before.id);
       toast("Removed from Saved for later.", {
         actionLabel: "Undo",
@@ -2554,7 +2569,7 @@
     } else {
       const saved = window.savePage?.(page, {
         chapter: chapterTitle(page),
-        passage,
+        passage: selectedPassage(),
       });
       if (!saved) {
         toast("This page can't be saved.");
@@ -2562,21 +2577,11 @@
       }
       hideSelectionBar();
       window.getSelection()?.removeAllRanges();
-      toast(
-        before
-          ? "Saved passage updated."
-          : "Saved for later. You'll find it on the home page.",
-        {
-          actionLabel: "Undo",
-          timeout: 6000,
-          onAction: () => {
-            window.removeHighlight?.(saved.id);
-            if (before) {
-              restoreSavedPage(before);
-            }
-          },
-        }
-      );
+      toast("Saved for later. You'll find it on the home page.", {
+        actionLabel: "Undo",
+        timeout: 6000,
+        onAction: () => window.removeHighlight?.(saved.id),
+      });
     }
     refreshPressedStates();
   }
@@ -4696,7 +4701,7 @@
     // later instead (with the selected passage, if any).
     registerAction({
       id: "savePage",
-      label: "Save",
+      label: () => (window.findSavedPage?.(currentPage()) ? "Saved" : "Save"),
       icon: "bookmark",
       placements: ["dock"],
       priority: 30,
