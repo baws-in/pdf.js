@@ -5009,6 +5009,9 @@
     const page = /(?:^#|&)page=(\d+)/.exec(location.hash)?.[1];
     return {
       at: fraction("at"),
+      // Search's link also gives the passage's height on the PDF page (?y=),
+      // for Page view; see markLanding().
+      y: fraction("y"),
       from: PAGE_ID.test(from || "") ? from : null,
       fromAt: fraction("fromAt"),
       page: page ? Number(page) : null,
@@ -5236,11 +5239,42 @@
       };
     }
 
-    const layer = view.div.querySelector(".textLayer");
-    if (!layer?.querySelector(".endOfContent")) {
+    const lines = layerLines(view);
+    if (!lines) {
       return null; // not drawn yet
     }
-    // Lines: the text layer's spans, grouped by their height on the page.
+    const total = lines.reduce((sum, line) => sum + line.chars, 0);
+    if (!total) {
+      // A page without text (a scan without a text layer): the text area
+      // of a printed page, roughly.
+      return fraction => {
+        const y = 0.07 + fraction * 0.86;
+        return { top: y - 0.015, bottom: y + 0.015 };
+      };
+    }
+    return fraction => {
+      const target = fraction * total;
+      let seen = 0;
+      for (const line of lines) {
+        seen += line.chars;
+        if (seen > target) {
+          return line;
+        }
+      }
+      return lines.at(-1);
+    };
+  }
+
+  /**
+   * The lines of a page's text layer, top first: {top, bottom} (page
+   * fractions) and their characters; null before the layer is drawn.
+   */
+  function layerLines(view) {
+    const box = view.div.getBoundingClientRect();
+    const layer = view.div.querySelector(".textLayer");
+    if (!box.height || !layer?.querySelector(".endOfContent")) {
+      return null;
+    }
     const spans = [];
     for (const span of layer.querySelectorAll("span")) {
       const rect = span.getBoundingClientRect();
@@ -5264,26 +5298,42 @@
         lines.push({ top: rect.top, bottom: rect.bottom, chars });
       }
     }
-    const total = lines.reduce((sum, line) => sum + line.chars, 0);
-    if (!total) {
-      // A page without text (a scan without a text layer): the text area
-      // of a printed page, roughly.
-      return fraction => {
-        const y = 0.07 + fraction * 0.86;
-        return { top: y - 0.015, bottom: y + 0.015 };
-      };
+    return lines.map(line => ({
+      top: (line.top - box.top) / box.height,
+      bottom: (line.bottom - box.top) / box.height,
+      chars: line.chars,
+    }));
+  }
+
+  const LANDING_LINES = 3;
+
+  /**
+   * {top, bottom} (page fractions) for a height on the PDF page: the line
+   * there and the next ones (LANDING_LINES in all, from the line above when
+   * the height is in a line's upper part); null before the text layer is
+   * drawn. A page without text: a little below that height.
+   */
+  function heightBox(view, y) {
+    const lines = layerLines(view);
+    if (!lines) {
+      return null;
     }
-    return fraction => {
-      const target = fraction * total;
-      let seen = 0;
-      for (const line of lines) {
-        seen += line.chars;
-        if (seen > target) {
-          return relative(line);
-        }
-      }
-      return relative(lines.at(-1));
-    };
+    if (!lines.length) {
+      return { top: Math.max(0, y - 0.005), bottom: Math.min(1, y + 0.05) };
+    }
+    let first = lines.findIndex(line => line.bottom > y);
+    if (first < 0) {
+      first = lines.length - 1;
+    }
+    // The height is interpolated between measured points and comes out up
+    // to a line low (a passage starting near the end of a line): unless it
+    // is near a line's foot, start with the line above too.
+    const line = lines[first];
+    if (first > 0 && y - line.top < 0.75 * (line.bottom - line.top)) {
+      first -= 1;
+    }
+    const last = lines[Math.min(lines.length - 1, first + LANDING_LINES - 1)];
+    return { top: lines[first].top, bottom: last.bottom };
   }
 
   /** {top, bottom} (page fractions) of the lines a stretch runs over. */
@@ -5605,16 +5655,25 @@
   // -- Landing: mark the passage, offer the way back --------------------------
 
   function markLanding(view) {
-    const { at } = edition.landing;
-    const place = textPlaces(view);
-    if (!place) {
+    const { at, y } = edition.landing;
+    let box;
+    if (y !== null && window.VIEW_MODE !== "text") {
+      // From search, in Page view: the lines at that height (owner,
+      // 2026-11-22), not the whole passage of the edition maps.
+      box = heightBox(view, y);
+    } else {
+      const place = textPlaces(view);
+      const stretches = place ? editionStretches(view.id) || [] : [];
+      const hit = stretches.find(([from, to]) => at >= from && at < to);
+      box =
+        place &&
+        (hit
+          ? stretchBox(place, hit[0], hit[1])
+          : stretchBox(place, at, Math.min(1, at + 0.08)));
+    }
+    if (!box) {
       return false;
     }
-    const stretches = editionStretches(view.id) || [];
-    const hit = stretches.find(([from, to]) => at >= from && at < to);
-    const box = hit
-      ? stretchBox(place, hit[0], hit[1])
-      : stretchBox(place, at, Math.min(1, at + 0.08));
     const top = Math.max(0, box.top - 0.006);
     const bottom = Math.min(1, box.bottom + 0.006);
     const mark = el("div", "rui-xl-mark", { "aria-hidden": "true" });
