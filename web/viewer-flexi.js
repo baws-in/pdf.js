@@ -688,6 +688,19 @@ function dropSlugLines(str) {
     .replace(new RegExp(String.raw`\b(\d{1,4})\s+${SLUG}\s+\1\b`, "gi"), "$1")
     .replace(new RegExp(SLUG, "gi"), " ");
 }
+// EN Vol 11's thumb tabs: the Book's number under a pointing hand in the outer
+// margin ("III" beside the verses of p.268), a text item of its own in Times Bold
+// 11.3 pt, read out amid the verses. All 489 Roman numerals in Times Bold in that
+// volume are tabs (the body, headings and the sources table are Century
+// Schoolbook), so they are left out of what is read (owner, 2026-11-22).
+const THUMB_TAB_BOOKS = /\/EN\/Volume_11(?!\d)/;
+function isThumbTab(item) {
+  return (
+    THUMB_TAB_BOOKS.test(window.PDFViewerApplication?.baseUrl || "") &&
+    /^[IVXL]{1,6}$/.test((item.str || "").trim()) &&
+    /TimesNewRoman.*Bold/i.test(item.trueFont || "")
+  );
+}
 function cleanTextForSpeech(str) {
   if (!str) return "";
   if (skipVerseNumbers()) str = dropVerseNumbers(str);
@@ -1041,6 +1054,8 @@ async function selectRangeForReading() {
                 Math.abs(prevItem.transform[5] - textItem.transform[5]) < 1
               )
                 continue;
+
+              if (isThumbTab(textItem)) continue;
 
               //convert the encodings, take hint from the truefont
               if (textItem.trueFont && textItem.trueFont.includes("Kruti")) {
