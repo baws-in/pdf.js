@@ -1363,10 +1363,54 @@
   // being adjusted.
   const SELBAR_NEAR = 140;
 
+  // Phones float their own menu (Copy, Select all...) just above a
+  // selection (below it when there's no room above); about this tall.
+  const SYSTEM_MENU_H = 60;
+
+  /**
+   * The part of the screen the bar may use, {top, bottom}: below the top bar
+   * and above whatever sits at the foot (the bottom bar, the mini player,
+   * the definition card), when they show.
+   */
+  function selectionBarArea() {
+    const height = window.innerHeight;
+    const showing = node => {
+      if (!node || node.hidden) {
+        return null;
+      }
+      const rect = node.getBoundingClientRect();
+      const visible =
+        rect.height > 0 &&
+        rect.bottom > 0 &&
+        rect.top < height &&
+        Number(getComputedStyle(node).opacity) > 0.1;
+      return visible ? rect : null;
+    };
+    let top = 0;
+    let bottom = height;
+    const header = showing(ui.top);
+    if (header && header.top < height / 2) {
+      top = Math.max(top, header.bottom);
+    }
+    const foot = [
+      ui.bottom,
+      document.querySelector(".rui-mini"),
+      document.querySelector(".rui-defcard"),
+    ];
+    for (const node of foot) {
+      const rect = showing(node);
+      if (rect && rect.top > height / 2) {
+        bottom = Math.min(bottom, rect.top);
+      }
+    }
+    return { top, bottom };
+  }
+
   function selectionBarStillFits(rects) {
     const bar = ui.selbar.getBoundingClientRect();
     const margin = 4;
-    if (bar.top < 0 || bar.bottom > window.innerHeight) {
+    const area = selectionBarArea();
+    if (bar.top < area.top || bar.bottom > area.bottom) {
       return false;
     }
     const covers = rects.some(
@@ -1383,6 +1427,12 @@
     return !covers && near;
   }
 
+  /**
+   * Puts the bar next to the selection, in the free part of the screen
+   * (selectionBarArea: not under the bottom bar or the definition card),
+   * clear of the phone's own menu. The page is never scrolled for it
+   * (owner, 2026-11-26).
+   */
   function positionSelectionBar(range, { lazy = false } = {}) {
     const bar = ui.selbar;
     const rects = [...range.getClientRects()].filter(r => r.width > 0);
@@ -1399,17 +1449,29 @@
     const height = bar.offsetHeight;
     const gap = 12;
     const margin = 8;
+    const area = selectionBarArea();
     // Phones show their own copy/share menu above a selection, so put ours
-    // below it on touch screens and above it with a mouse.
+    // below it on touch screens and above it with a mouse; above, on touch
+    // screens, means above the phone's menu too.
     const touchFirst = matchMedia("(pointer: coarse)").matches;
+    const menu = touchFirst ? SYSTEM_MENU_H : 0;
     const below = last.bottom + gap;
-    const above = first.top - height - gap;
-    const fitsBelow = below + height <= window.innerHeight - margin;
-    const fitsAbove = above >= margin;
+    const above = first.top - height - gap - menu;
+    const fitsBelow = below + height <= area.bottom - margin;
+    const fitsAbove = above >= area.top + margin;
     const order = touchFirst
       ? [fitsBelow && below, fitsAbove && above]
       : [fitsAbove && above, fitsBelow && below];
-    const top = order.find(value => value !== false) ?? margin;
+    // Neither fits (a selection taller than the screen): touch screens at
+    // the foot of the free area (the phone's menu is at the selection's
+    // start), a mouse at the top.
+    const fallback = touchFirst
+      ? area.bottom - height - margin
+      : area.top + margin;
+    const top = Math.max(
+      area.top + margin,
+      order.find(value => value !== false) ?? fallback
+    );
     const left = Math.min(
       Math.max(box.left + box.width / 2 - width / 2, margin),
       window.innerWidth - width - margin
@@ -1446,6 +1508,14 @@
         lastRange = range.cloneRange();
       } else if (lastRange && !hasSelection()) {
         lastRangeCollapsedAt = performance.now();
+      }
+      // A meaning shown for a selected word goes once the selection grows
+      // or moves to other text (owner, 2026-11-26).
+      if (ui.defcard && ui.defcardWord && range) {
+        const now = cleanWord(selectedText()).toLowerCase();
+        if (now && now !== ui.defcardWord) {
+          closeDefinition();
+        }
       }
       clearTimeout(timer);
       // While the selection is being adjusted the bar stays where it is,
@@ -1540,13 +1610,30 @@
   function closeDefinition() {
     ui.defcard?.remove();
     ui.defcard = null;
+    ui.defcardWord = null;
+  }
+
+  /** Where the selection is on screen ({top, bottom}), or null. */
+  function selectionSpan() {
+    const range = selectionRangeInBook();
+    const box = range?.getBoundingClientRect();
+    return box?.height ? { top: box.top, bottom: box.bottom } : null;
   }
 
   /**
    * Shows the definition card for a word. `definition` is plain text from
    * the app's dictionary, or empty when the word isn't in it.
+   * `fromSelection`: shown because the word was selected; the card closes
+   * if the selection then grows or changes. `near`: where the word is on
+   * screen ({top, bottom}); the selection's place by default. The card sits
+   * at the foot of the screen, or at the top when the word is in the lower
+   * half, so it never covers the word (the page isn't scrolled for it).
    */
-  function showDefinition(word, definition) {
+  function showDefinition(
+    word,
+    definition,
+    { fromSelection = false, near = selectionSpan() } = {}
+  ) {
     closeDefinition();
     const card = el("section", "rui-defcard", { "aria-label": "Definition" });
     // Static markup (icons and fixed labels only).
@@ -1601,9 +1688,18 @@
         closeDefinition();
       }
     });
+    if (near && (near.top + near.bottom) / 2 > window.innerHeight / 2) {
+      card.classList.add("rui-defcard-top");
+    }
     const host = document.getElementById("outerContainer") || document.body;
     host.append(card);
     ui.defcard = card;
+    ui.defcardWord = fromSelection ? word.toLowerCase() : null;
+    // A card at the foot takes room the selection bar may have used.
+    const range = !ui.selbar?.hidden && selectionRangeInBook();
+    if (range) {
+      requestAnimationFrame(() => positionSelectionBar(range));
+    }
   }
 
   function defineSelection() {
@@ -2526,7 +2622,9 @@
       return false;
     }
     const word = /^[A-Z]+$/.test(hit.word) ? hit.word.toLowerCase() : hit.word;
-    showDefinition(word, wordHelper.data.defs?.[hit.key]);
+    showDefinition(word, wordHelper.data.defs?.[hit.key], {
+      near: { top: y, bottom: y },
+    });
     return true;
   }
 
@@ -4669,6 +4767,780 @@
     );
   }
 
+  // ---------------------------------------------------------------------
+  // Share
+  // ---------------------------------------------------------------------
+  //
+  // Share (dock, selection bar, More → Page image) opens one sheet (owner,
+  // 2026-11-26). With nothing selected it first asks whether to select a
+  // passage. Then: what to send (a quote card of the passage, the page
+  // image, or only the message and link), "Credit me as the source" for a
+  // signed-in reader (on by default; the link names them: ?ref=username),
+  // and where to (WhatsApp, Telegram, X, Facebook, LinkedIn, Email, Copy,
+  // More = the phone's or browser's own share window). A tip at the foot
+  // shows one reader feature.
+  //
+  // The link opens the page at the passage, in either view: ?y=&y2= are
+  // the top and bottom of the selection as fractions of the PDF page's
+  // height (a selection in Text view is turned into heights with the PDF's
+  // own lines, see pdfRows), plus utm_source (the platform), utm_medium=
+  // share, utm_campaign=reader. The app (Book.jsx) gives the signed-in
+  // reader (getShareIdentity), sends images and opens other apps in the
+  // Android app (shareNative, openExternal).
+
+  const SHARE_CARD = { width: 1080, height: 1350 };
+  const SHARE_QUOTE_MAX = 600; // characters on the quote card
+  const SHARE_TEXT_MAX = 1500; // characters of the passage in a message
+  const SHARE_SHORT_MAX = 200; // X: the passage in a post
+  // Under the book's name: who the book is by. Not "— Dr. Ambedkar" under
+  // the passage, which may quote someone else.
+  const SHARE_AUTHOR = "By Dr. B. R. Ambedkar";
+  const SHARE_TIPS = [
+    "Select a passage before sharing: it becomes a quote card, and the link opens right at it.",
+    "Highlight in four colours: select text, then tap a colour. Notebook keeps them all.",
+    "Save keeps this page on your home page, to come back to later.",
+    "Listen reads the book aloud, and keeps going with the screen off in the app.",
+    "Translate shows the same passage in the other edition, Hindi or English.",
+    "Aa has night and sepia, text size, and Text view for easier reading on a phone.",
+    "Citation (More) gives a ready-made reference for this page.",
+    "Define: select a single word to see what it means.",
+  ];
+  const SHARE_PLATFORMS = [
+    {
+      id: "whatsapp",
+      label: "WhatsApp",
+      mark: "W",
+      color: "#25d366",
+      href: m => `https://wa.me/?text=${encodeURIComponent(m.text)}`,
+    },
+    {
+      id: "telegram",
+      label: "Telegram",
+      mark: "T",
+      color: "#229ed9",
+      href: m =>
+        `https://t.me/share/url?url=${encodeURIComponent(m.link)}` +
+        `&text=${encodeURIComponent(m.body)}`,
+    },
+    {
+      id: "x",
+      label: "X",
+      mark: "X",
+      color: "#111111",
+      href: m =>
+        `https://twitter.com/intent/tweet?text=${encodeURIComponent(m.short)}` +
+        `&url=${encodeURIComponent(m.link)}`,
+    },
+    {
+      id: "facebook",
+      label: "Facebook",
+      mark: "f",
+      color: "#1877f2",
+      href: m =>
+        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+          m.link
+        )}`,
+    },
+    {
+      id: "linkedin",
+      label: "LinkedIn",
+      mark: "in",
+      color: "#0a66c2",
+      href: m =>
+        "https://www.linkedin.com/sharing/share-offsite/?url=" +
+        encodeURIComponent(m.link),
+    },
+    {
+      id: "email",
+      label: "Email",
+      mark: "@",
+      color: "#6b665c",
+      href: m =>
+        `mailto:?subject=${encodeURIComponent(m.subject)}` +
+        `&body=${encodeURIComponent(m.text)}`,
+    },
+    { id: "copy", label: "Copy", icon: "copy" },
+    { id: "more", label: "More", icon: "share" },
+  ];
+
+  /** The signed-in reader, from the app: {username} or null. */
+  function shareIdentity() {
+    try {
+      const who =
+        window.parent !== window && window.parent.getShareIdentity?.();
+      return who?.username ? who : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function shareCreditOn() {
+    return storageGet("ruiShareCredit") !== "0";
+  }
+
+  const clamp01 = value => Math.min(1, Math.max(0, value));
+  const round3 = value => String(Math.round(value * 1000) / 1000);
+
+  /** A place (fraction of characters) in Text view's text of a page. */
+  function textViewPlace(textView, node, offset) {
+    const before = document.createRange();
+    before.setStart(textView, 0);
+    try {
+      before.setEnd(node, offset);
+    } catch {
+      return null;
+    }
+    let total = 0;
+    let at = null;
+    const walker = document.createTreeWalker(textView, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const text = walker.currentNode;
+      if (!text.data.trim()) {
+        continue;
+      }
+      if (at === null) {
+        if (text === node) {
+          at = total + offset;
+        } else if (!before.intersectsNode(text)) {
+          at = total;
+        }
+      }
+      total += text.data.length;
+    }
+    if (!total) {
+      return null;
+    }
+    return clamp01((at ?? total) / total);
+  }
+
+  /**
+   * The selection to share: {page, text, y, y2} (heights on the PDF page,
+   * whichever view it was made in; null if they can't be had), or null.
+   */
+  async function captureSelection() {
+    if (!restoreSelection()) {
+      return null;
+    }
+    const range = selectionRangeInBook();
+    const text = range && selectedText();
+    if (!text) {
+      return null;
+    }
+    const start =
+      range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? range.startContainer
+        : range.startContainer.parentElement;
+    const pageDiv = start?.closest(".page");
+    const page = Number(pageDiv?.dataset.pageNumber);
+    if (!page) {
+      return null;
+    }
+    const result = { page, text, y: null, y2: null };
+    if (window.VIEW_MODE === "text") {
+      const textView = pageDiv.querySelector(".textView");
+      const from =
+        textView &&
+        textViewPlace(textView, range.startContainer, range.startOffset);
+      if (from !== null && textView) {
+        const to = textView.contains(range.endContainer)
+          ? textViewPlace(textView, range.endContainer, range.endOffset)
+          : 1;
+        const rows = await pdfRows(page);
+        const heights = passageHeights(rows, text);
+        if (heights) {
+          Object.assign(result, heights);
+        } else if (rows?.length) {
+          result.y = placeToHeight(rows, Math.max(0, from - PLACE_SLACK));
+          result.y2 = placeToHeight(
+            rows,
+            Math.min(1, Math.max(from, to ?? from) + PLACE_SLACK),
+            true
+          );
+        }
+      }
+    } else {
+      const box = pageDiv.getBoundingClientRect();
+      // The selected lines on this page (not the next page's, and not the
+      // text layer's page-sized end-of-content block).
+      const rects = [...range.getClientRects()].filter(
+        r =>
+          r.width > 0 &&
+          r.height > 0 &&
+          r.height < box.height * 0.1 &&
+          r.bottom > box.top &&
+          r.top < box.bottom
+      );
+      if (rects.length && box.height) {
+        result.y = clamp01(
+          (Math.min(...rects.map(r => r.top)) - box.top) / box.height
+        );
+        result.y2 = clamp01(
+          (Math.max(...rects.map(r => r.bottom)) - box.top) / box.height
+        );
+      }
+    }
+    return result;
+  }
+
+  /** The link to share: the page, the passage, the sharer, the platform. */
+  function shareLink(page, passage, source, credit) {
+    const url = new URL(shortPageUrl(page));
+    if (passage?.y !== null && passage?.y !== undefined) {
+      url.searchParams.set("y", round3(passage.y));
+      if (passage.y2 !== null && passage.y2 > passage.y) {
+        url.searchParams.set("y2", round3(passage.y2));
+      }
+    }
+    const who = credit && shareIdentity()?.username;
+    if (who) {
+      url.searchParams.set("ref", who);
+    }
+    url.searchParams.set("utm_source", source);
+    url.searchParams.set("utm_medium", "share");
+    url.searchParams.set("utm_campaign", "reader");
+    return url.href;
+  }
+
+  function cut(text, max) {
+    if (text.length <= max) {
+      return text;
+    }
+    const part = text.slice(0, max);
+    const space = part.lastIndexOf(" ");
+    return `${(space > max * 0.6 ? part.slice(0, space) : part).trim()}…`;
+  }
+
+  /**
+   * A contents title as people write it: no leading number ("1 ", "IV. "),
+   * and title case for one set in capitals ("CASTES IN INDIA").
+   */
+  function tidyTitle(title) {
+    const text = String(title || "")
+      .replace(/^\s*(?:\d+|[IVXLC]+)[.):]?\s+/, "")
+      .trim();
+    if (!/\p{Lu}/u.test(text) || text !== text.toUpperCase()) {
+      return text;
+    }
+    const small = new Set(["a", "an", "and", "as", "at", "by", "for", "in"]);
+    for (const word of ["of", "on", "or", "the", "to", "with"]) {
+      small.add(word);
+    }
+    return text
+      .toLowerCase()
+      .split(" ")
+      .map((word, i) => {
+        if (i > 0 && small.has(word)) {
+          return word;
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(" ");
+  }
+
+  /** Where a page is from: "chapter, book", or the book alone. */
+  function shareSource(page) {
+    const chapter = tidyTitle(chapterTitle(page));
+    const book = bookLabel();
+    const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+    return chapter && !same(chapter, book) ? `${chapter}, ${book}` : book;
+  }
+
+  /** The message for a platform: {link, body, text, short, subject}. */
+  function shareMessage(state, source) {
+    const page = state.passage?.page || currentPage();
+    const link = shareLink(page, state.passage, source, state.credit);
+    const where = shareSource(page);
+    // The book, not the speaker: a passage may be someone else's words
+    // (a letter, a debate) quoted in the book (owner, 2026-11-26).
+    let body;
+    let short;
+    if (state.passage) {
+      body =
+        `“${cut(state.passage.text, SHARE_TEXT_MAX)}”\n` +
+        `— ${where}\n${SHARE_AUTHOR}`;
+      short =
+        `“${cut(state.passage.text, SHARE_SHORT_MAX)}” ` +
+        `— ${cut(where, 80)}`;
+    } else {
+      body = `${where}\n${SHARE_AUTHOR}`;
+      short = `${cut(where, 80)}, ${SHARE_AUTHOR}`;
+    }
+    return {
+      link,
+      body,
+      short,
+      subject: where || "Dr. B.R. Ambedkar's Writings and Speeches",
+      text: `${body}\n\nRead it on BAWS: ${link}`,
+    };
+  }
+
+  // -- Images -----------------------------------------------------------------
+
+  /** Lines of `text` no wider than `max` at the current font. */
+  function wrapText(ctx, text, max) {
+    const lines = [];
+    for (const paragraph of text.split(/\n+/)) {
+      let line = "";
+      for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && ctx.measureText(next).width > max) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = next;
+        }
+      }
+      if (line) {
+        lines.push(line);
+      }
+    }
+    return lines;
+  }
+
+  /** A 1080 x 1350 card with the passage, for posts and chats. */
+  async function quoteCardImage(state, qrLink) {
+    const { width, height } = SHARE_CARD;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    const serif =
+      'Georgia, "Noto Serif", "Noto Serif Devanagari", "Times New Roman", serif';
+    const sans = getComputedStyle(document.documentElement)
+      .getPropertyValue("--rui-font")
+      .trim();
+    const page = state.passage.page;
+
+    // The QR code loads its logo over the network: start it first.
+    const qrSize = 150;
+    const qrData = window.getQRCode
+      ? Promise.race([
+          window.getQRCode(qrLink, qrSize).getRawData("png"),
+          new Promise(resolve => {
+            setTimeout(resolve, 2500, null);
+          }),
+        ]).catch(() => null)
+      : null;
+
+    ctx.fillStyle = "#fbf7ee";
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "#2347a0";
+    ctx.fillRect(0, 0, width, 14);
+
+    // The passage, as large as fits.
+    const text = cut(state.passage.text, SHARE_QUOTE_MAX);
+    const area = { x: 110, top: 230, width: width - 220, height: 760 };
+    let size = 64;
+    let lines;
+    for (; size > 30; size -= 2) {
+      ctx.font = `${size}px ${serif}`;
+      lines = wrapText(ctx, text, area.width);
+      if (lines.length * size * 1.4 <= area.height) {
+        break;
+      }
+    }
+    ctx.fillStyle = "#c9bfa8";
+    ctx.font = `bold 220px ${serif}`;
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("“", area.x - 30, area.top + 40);
+    ctx.fillStyle = "#1c1b19";
+    ctx.font = `${size}px ${serif}`;
+    ctx.textBaseline = "top";
+    const lineHeight = size * 1.4;
+    const block = lines.length * lineHeight;
+    const first = area.top + Math.max(0, (area.height - block) / 2);
+    lines.forEach((line, i) => {
+      ctx.fillText(line, area.x, first + i * lineHeight);
+    });
+
+    // The book (not the speaker: the passage may quote someone else), and
+    // who the book is by.
+    let y = first + block + 50;
+    ctx.fillStyle = "#1c1b19";
+    ctx.font = `600 38px ${sans}`;
+    const source = wrapText(ctx, `— ${shareSource(page)}`, area.width);
+    for (const line of source.slice(0, 2)) {
+      ctx.fillText(line, area.x, y);
+      y += 50;
+    }
+    y += 4;
+    ctx.fillStyle = "#6b665c";
+    ctx.font = `34px ${sans}`;
+    ctx.fillText(SHARE_AUTHOR, area.x, y);
+
+    // Foot: the site, the sharer, the QR code to the passage.
+    ctx.fillStyle = "#2347a0";
+    ctx.font = `bold 40px ${sans}`;
+    ctx.fillText("baws.in", area.x, height - 170);
+    const who = state.credit && shareIdentity()?.username;
+    ctx.fillStyle = "#6b665c";
+    ctx.font = `30px ${sans}`;
+    ctx.fillText(
+      who
+        ? `Shared by @${who}`
+        : "Dr. Babasaheb Ambedkar's Writings and Speeches",
+      area.x,
+      height - 115
+    );
+    const qrBlob = await qrData;
+    if (qrBlob) {
+      const qr = await createImageBitmap(qrBlob);
+      ctx.drawImage(
+        qr,
+        width - 110 - qrSize,
+        height - 110 - qrSize,
+        qrSize,
+        qrSize
+      );
+    }
+    return new Promise(resolve => {
+      canvas.toBlob(resolve, "image/png");
+    });
+  }
+
+  /** The page as an image (its highlights, the selection, a QR code). */
+  async function pageImage(state, qrLink) {
+    const page = state.passage?.page || currentPage();
+    if (
+      window.VIEW_MODE !== "text" &&
+      page === currentPage() &&
+      window.makeSharePageImage
+    ) {
+      const blob = await window.makeSharePageImage(qrLink);
+      if (blob) {
+        return blob;
+      }
+    }
+    const url = await printPageImage(page, {
+      withQr: true,
+      withHighlights: true,
+    });
+    if (!url) {
+      return null;
+    }
+    try {
+      return await (await fetch(url)).blob();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // -- Sending ----------------------------------------------------------------
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = el("a", "", { href: url, download: name });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function postToApp(action, data) {
+    window.parent.postMessage(JSON.stringify({ action, data }), "*");
+  }
+
+  /** Opens a platform's share page (in the app: through the phone). */
+  function openPlatform(href) {
+    if (inNativeApp()) {
+      postToApp("openExternal", { url: href });
+    } else {
+      window.open(href, "_blank", "noopener");
+    }
+  }
+
+  function trackShare(platform, kind, page) {
+    try {
+      window.parent.gtag?.("event", "share", {
+        method: platform,
+        content_type: kind,
+        item_id: pageId(page) || String(page),
+      });
+    } catch {
+      // no analytics
+    }
+  }
+
+  /** Chrome on Windows offers file sharing but often fails at it. */
+  function canShareFiles() {
+    try {
+      return (
+        !/Windows/.test(navigator.userAgent) &&
+        !!navigator.canShare?.({
+          files: [new File([""], "x.png", { type: "image/png" })],
+        })
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  async function sendShare(state, platform) {
+    const page = state.passage?.page || currentPage();
+    const source = platform.id === "more" ? "share_sheet" : platform.id;
+    const message = shareMessage(state, source);
+    trackShare(source, state.kind, page);
+    storageSet("ruiShareImage", state.kind);
+
+    if (state.kind === "none") {
+      if (platform.id === "copy") {
+        toast(
+          (await copyText(message.text))
+            ? "Message and link copied."
+            : "Couldn't copy. Please try again."
+        );
+      } else if (platform.id === "more") {
+        if (inNativeApp()) {
+          postToApp("shareNative", { text: message.text });
+        } else if (navigator.share) {
+          await navigator.share({ text: message.text }).catch(() => {});
+        } else {
+          await copyText(message.text);
+          toast("Message and link copied: paste them to share.");
+        }
+      } else {
+        openPlatform(platform.href(message));
+      }
+      return;
+    }
+
+    const preparing = toast("Preparing the image…", { timeout: 0 });
+    let blob;
+    try {
+      const qrLink = shareLink(page, state.passage, "qr_code", state.credit);
+      blob =
+        state.kind === "quote"
+          ? await quoteCardImage(state, qrLink)
+          : await pageImage(state, qrLink);
+    } catch (error) {
+      console.warn("Share image:", error);
+    } finally {
+      preparing();
+    }
+    if (!blob) {
+      toast("Couldn't make the image. Sharing the message only.");
+      await sendShare({ ...state, kind: "none" }, platform);
+      return;
+    }
+    const name = `baws-${
+      state.kind === "quote" ? "quote" : "page"
+    }-${page}.png`;
+    const pick =
+      platform.href && platform.id !== "more"
+        ? ` Choose ${platform.label} in the share window.`
+        : "";
+
+    if (inNativeApp()) {
+      postToApp("shareNative", {
+        text: message.text,
+        base64: await blobToDataUrl(blob),
+        fileName: name,
+      });
+      if (pick) {
+        toast(pick.trim());
+      }
+      return;
+    }
+    if (canShareFiles()) {
+      const file = new File([blob], name, { type: blob.type || "image/png" });
+      try {
+        await navigator.share({ files: [file], text: message.text });
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          return; // the share window was closed
+        }
+        // Too long after the tap, or refused: download it instead.
+      }
+    }
+    downloadBlob(blob, name);
+    const copied = await copyText(message.text);
+    if (platform.href && platform.id !== "more" && platform.id !== "copy") {
+      openPlatform(platform.href(message));
+      toast(
+        `Image downloaded${copied ? " and message copied" : ""}: attach the ` +
+          `image in ${platform.label}.`,
+        { timeout: 7000 }
+      );
+    } else {
+      toast(`Image downloaded${copied ? ", message and link copied" : ""}.`, {
+        timeout: 6000,
+      });
+    }
+  }
+
+  // -- The sheet --------------------------------------------------------------
+
+  function nextShareTip() {
+    const index = (Number(storageGet("ruiShareTip")) || 0) % SHARE_TIPS.length;
+    storageSet("ruiShareTip", String(index + 1));
+    return SHARE_TIPS[index];
+  }
+
+  /**
+   * Share: from the dock or the selection bar. `kind` preselects what to
+   * send ("page" from More → Page image).
+   */
+  async function openShareSheet({ kind } = {}) {
+    const passage = await captureSelection();
+    if (!passage && !kind) {
+      openSheet("Share", body => {
+        body.classList.add("rui-share");
+        const ask = el("p", "rui-share-ask");
+        ask.textContent = "Would you like to select something first?";
+        const why = el("p", "rui-share-note");
+        why.textContent =
+          "A selected passage becomes a quote card, and the link opens right at it.";
+        const select = el("button", "rui-primary", { type: "button" });
+        select.textContent = "Select a passage";
+        select.addEventListener("click", () => {
+          closeSheet();
+          toast(
+            "Press and hold a word, then drag to the end of the passage. Then tap Share.",
+            { timeout: 7000 }
+          );
+        });
+        const page = el("button", "rui-share-secondary", { type: "button" });
+        page.textContent = "Share the whole page";
+        page.addEventListener("click", () => showShareOptions(null, "page"));
+        const row = el("div", "rui-share-actions");
+        row.append(page, select);
+        body.append(ask, why, row);
+      });
+      return;
+    }
+    showShareOptions(passage, kind);
+  }
+
+  function showShareOptions(passage, preset) {
+    const stored = storageGet("ruiShareImage");
+    const kinds = passage ? ["quote", "page", "none"] : ["page", "none"];
+    let kind = kinds.includes(stored) ? stored : kinds[0];
+    if (preset && kinds.includes(preset)) {
+      kind = preset;
+    }
+    const state = { passage, credit: shareCreditOn(), kind };
+    const page = passage?.page || currentPage();
+    openSheet("Share", body => {
+      body.classList.add("rui-share");
+
+      const preview = el("p", "rui-share-preview");
+      if (passage) {
+        const quote = el("q");
+        quote.textContent = cut(passage.text, 220);
+        preview.append(quote);
+      }
+      const where = el("span", "rui-share-where");
+      where.textContent = shareSource(page);
+      preview.append(where);
+
+      const imageTitle = sectionTitle("Include an image");
+      const picker = el("div", "rui-segmented rui-share-kinds", {
+        role: "group",
+        "aria-label": "Include an image",
+      });
+      picker.style.gridTemplateColumns = `repeat(${kinds.length}, minmax(0, 1fr))`;
+      const KIND_LABELS = {
+        quote: ["Quote card", "quote"],
+        page: ["Page", "image"],
+        none: ["No image", "link"],
+      };
+      const showKind = () => {
+        for (const button of picker.children) {
+          button.setAttribute(
+            "aria-pressed",
+            String(button.value === state.kind)
+          );
+        }
+      };
+      for (const option of kinds) {
+        const [label, iconName] = KIND_LABELS[option];
+        const button = el("button", "", { type: "button", value: option });
+        // Static icon markup and a fixed label.
+        // eslint-disable-next-line no-unsanitized/property
+        button.innerHTML = icon(iconName);
+        button.append(document.createTextNode(label));
+        button.addEventListener("click", () => {
+          state.kind = option;
+          showKind();
+        });
+        picker.append(button);
+      }
+      showKind();
+
+      const who = shareIdentity();
+      let credit;
+      if (who) {
+        credit = makeSwitch(
+          `Credit me as the source (@${who.username})`,
+          state.credit,
+          on => {
+            state.credit = on;
+            storageSet("ruiShareCredit", on ? "1" : "0");
+          }
+        );
+        credit.classList.add("rui-share-credit");
+      } else {
+        credit = el("p", "rui-share-note");
+        credit.textContent =
+          "Signed-in readers get credit when people open what they share.";
+      }
+
+      const toTitle = sectionTitle("Share to");
+      const tiles = el("div", "rui-tiles rui-share-tiles");
+      for (const platform of SHARE_PLATFORMS) {
+        const tile = el("button", "rui-tile", { type: "button" });
+        if (platform.icon) {
+          // Static icon markup.
+          // eslint-disable-next-line no-unsanitized/property
+          tile.innerHTML = icon(platform.icon);
+        } else {
+          const mark = el("span", "rui-share-mark", { "aria-hidden": "true" });
+          mark.textContent = platform.mark;
+          mark.style.background = platform.color;
+          tile.append(mark);
+        }
+        const label = el("span");
+        label.textContent = platform.label;
+        tile.append(label);
+        tile.addEventListener("click", () => {
+          closeSheet();
+          hideSelectionBar();
+          sendShare({ ...state }, platform).catch(error => {
+            console.warn("Share:", error);
+            toast("Couldn't share. Please try again.");
+          });
+        });
+        tiles.append(tile);
+      }
+
+      const tip = el("p", "rui-share-tip");
+      const tipLabel = el("strong");
+      tipLabel.textContent = "Tip: ";
+      tip.append(tipLabel, document.createTextNode(nextShareTip()));
+
+      body.append(preview, imageTitle, picker, credit, toTitle, tiles, tip);
+    });
+  }
+
   function registerBuiltInActions() {
     registerAction({
       id: "back",
@@ -4733,7 +5605,7 @@
       placements: ["dock"],
       priority: 20,
       elementId: "shareButton",
-      run: () => window.shareButtonClick?.(false),
+      run: () => openShareSheet(),
       longPress: () => window.shareButtonClick?.(true),
     });
     // Selection bar (after the colour swatches)
@@ -4751,10 +5623,7 @@
       icon: "share",
       placements: ["selection"],
       priority: 20,
-      run: () => {
-        hideSelectionBar();
-        window.shareButtonClick?.(false);
-      },
+      run: () => openShareSheet(),
     });
     registerAction({
       id: "copy",
@@ -4911,7 +5780,7 @@
       placements: ["more"],
       group: "Share",
       priority: 50,
-      run: () => window.shareButtonClick?.(false),
+      run: () => openShareSheet({ kind: "page" }),
     });
     registerAction({
       id: "shareQr",
@@ -5027,8 +5896,12 @@
     return {
       at: fraction("at"),
       // Search's link also gives the passage's height on the PDF page (?y=),
-      // for Page view; see markLanding().
+      // for Page view; see markLanding(). A shared passage gives its top and
+      // bottom (?y=&y2=) and no ?at=.
       y: fraction("y"),
+      y2: fraction("y2"),
+      to: null, // Text view: where a shared passage ends (from y2)
+      letters: "", // Text view: a shared passage's letters (from y..y2)
       from: PAGE_ID.test(from || "") ? from : null,
       fromAt: fraction("fromAt"),
       page: page ? Number(page) : null,
@@ -5361,6 +6234,262 @@
     return { top: first.top, bottom: Math.max(first.bottom, last.bottom) };
   }
 
+  /**
+   * {top, bottom} for a shared passage in Page view: the text-layer lines
+   * between its top and bottom heights (the selection's own lines); the
+   * heights themselves on a page without text or before the layer is drawn
+   * (null then, to try again).
+   */
+  function spanBox(view, y, y2) {
+    const lines = layerLines(view);
+    if (!lines) {
+      return null;
+    }
+    const inside = lines.filter(line => {
+      const middle = (line.top + line.bottom) / 2;
+      return middle >= y && middle <= y2;
+    });
+    if (!inside.length) {
+      return { top: y, bottom: y2 };
+    }
+    return {
+      top: Math.min(...inside.map(line => line.top)),
+      bottom: Math.max(...inside.map(line => line.bottom)),
+    };
+  }
+
+  // -- A page's text lines from the PDF itself ------------------------------
+  //
+  // Shared links carry heights on the PDF page (?y=&y2=), whichever view
+  // the passage was selected in, so they open right in Page view (the
+  // default). Text view converts between those heights and places in the
+  // page's text (fractions of its characters, as ?at= is) with the PDF's
+  // own lines: no drawn page needed.
+
+  const pdfRowsCache = new Map(); // page number -> Promise<rows|null>
+  // Text view's text and the PDF's lines count characters a little
+  // differently (spaces, hyphens): a passage converted between them is
+  // widened by about half a line each way, so the bar holds all of it.
+  const PLACE_SLACK = 0.012;
+
+  /** The page's text lines, top first: {top, bottom, chars} (fractions). */
+  function pdfRows(pageNumber) {
+    if (!pdfRowsCache.has(pageNumber)) {
+      pdfRowsCache.set(
+        pageNumber,
+        (async () => {
+          const page = await app().pdfDocument.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 1 });
+          const { items } = await page.getTextContent();
+          const pieces = [];
+          for (const item of items) {
+            if (!item.str?.trim()) {
+              continue;
+            }
+            const [, base] = viewport.convertToViewportPoint(
+              item.transform[4],
+              item.transform[5]
+            );
+            const height =
+              Math.abs(item.height || item.transform[3]) ||
+              viewport.height * 0.01;
+            pieces.push({
+              top: (base - height) / viewport.height,
+              bottom: base / viewport.height,
+              chars: item.str.length,
+              str: item.str,
+            });
+          }
+          const inOrder = pieces.slice(); // the PDF's own (reading) order
+          pieces.sort((a, b) => a.top - b.top);
+          const rows = [];
+          for (const piece of pieces) {
+            const row = rows.at(-1);
+            if (row && piece.top < row.top + (row.bottom - row.top) * 0.5) {
+              row.bottom = Math.max(row.bottom, piece.bottom);
+              row.chars += piece.chars;
+            } else {
+              rows.push({ ...piece });
+            }
+          }
+          rows.items = inOrder;
+          return rows;
+        })().catch(() => null)
+      );
+    }
+    return pdfRowsCache.get(pageNumber);
+  }
+
+  /** A height on the page as a place in its text; `end`: a passage's foot. */
+  function heightToPlace(rows, y, end = false) {
+    const total = rows.reduce((sum, row) => sum + row.chars, 0);
+    if (!total) {
+      return null;
+    }
+    let seen = 0;
+    for (const row of rows) {
+      if (end ? row.top >= y : row.bottom > y) {
+        break;
+      }
+      seen += row.chars;
+    }
+    return Math.min(1, seen / total);
+  }
+
+  /** A place in the page's text as a height; `end`: that line's foot. */
+  function placeToHeight(rows, place, end = false) {
+    const total = rows.reduce((sum, row) => sum + row.chars, 0);
+    if (!total || !rows.length) {
+      return null;
+    }
+    const target = place * total;
+    let seen = 0;
+    for (const row of rows) {
+      seen += row.chars;
+      if (seen > target || (end && seen >= target)) {
+        return end ? row.bottom : row.top;
+      }
+    }
+    return end ? rows.at(-1).bottom : rows.at(-1).top;
+  }
+
+  // -- Matching a passage by its words -----------------------------------
+  //
+  // Text view's text and the PDF's text are the same words, spaced and
+  // hyphenated differently. Compared as letters only (no spaces,
+  // punctuation or hyphens), a passage is found exactly in either.
+
+  const LETTER = /[\p{L}\p{M}\p{N}]/u;
+  const NEEDLE = 24; // letters looked for at each end of a passage
+
+  /** The letters of `text`, lower case. */
+  function lettersOnly(text) {
+    let out = "";
+    for (let i = 0; i < text.length; i++) {
+      if (LETTER.test(text[i])) {
+        out += text[i].toLowerCase();
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Where a passage (its letters) is in `hay` (letters): {first, last}
+   * letter indices, or null.
+   */
+  function findLetters(hay, letters) {
+    if (letters.length < 8) {
+      return null;
+    }
+    for (const size of [NEEDLE, 12]) {
+      const head = letters.slice(0, size);
+      const tail = letters.slice(-size);
+      const first = hay.indexOf(head);
+      if (first < 0) {
+        continue;
+      }
+      const end = hay.indexOf(tail, first);
+      if (end >= 0) {
+        return { first, last: end + tail.length - 1 };
+      }
+    }
+    return null;
+  }
+
+  /** A passage's text as heights on the PDF page {y, y2}, or null. */
+  function passageHeights(rows, text) {
+    const items = rows?.items;
+    if (!items?.length) {
+      return null;
+    }
+    let hay = "";
+    const owner = [];
+    items.forEach((item, i) => {
+      const letters = lettersOnly(item.str);
+      hay += letters;
+      for (let k = 0; k < letters.length; k++) {
+        owner.push(i);
+      }
+    });
+    const found = findLetters(hay, lettersOnly(text));
+    if (!found) {
+      return null;
+    }
+    const first = items[owner[found.first]];
+    const last = items[owner[found.last]];
+    return { y: first.top, y2: Math.max(first.bottom, last.bottom) };
+  }
+
+  /** The letters of the PDF's text between two heights (a shared passage). */
+  function lettersBetween(rows, y, y2) {
+    return lettersOnly(
+      (rows?.items || [])
+        .filter(item => {
+          const middle = (item.top + item.bottom) / 2;
+          return middle >= y && middle <= y2;
+        })
+        .map(item => item.str)
+        .join("")
+    );
+  }
+
+  /**
+   * A passage (its letters) in a page's Text view, as places (fractions of
+   * its characters, as textPlaces counts them): {at, to}, or null.
+   */
+  function findInTextView(view, letters) {
+    const text = view.div.querySelector(".textView");
+    if (!text || !letters) {
+      return null;
+    }
+    let hay = "";
+    const offsets = [];
+    let total = 0;
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!node.data.trim()) {
+        continue;
+      }
+      for (let k = 0; k < node.data.length; k++) {
+        if (LETTER.test(node.data[k])) {
+          hay += node.data[k].toLowerCase();
+          offsets.push(total + k);
+        }
+      }
+      total += node.data.length;
+    }
+    const found = total && findLetters(hay, letters);
+    if (!found) {
+      return null;
+    }
+    return {
+      at: offsets[found.first] / total,
+      to: (offsets[found.last] + 1) / total,
+    };
+  }
+
+  /** A shared link (heights only): its passage as places, for Text view. */
+  async function landingTextPlace(pageNumber) {
+    const { y, y2 } = edition.landing;
+    const rows = y !== null && (await pdfRows(pageNumber));
+    if (!rows?.length) {
+      return;
+    }
+    if (y2 !== null && y2 > y) {
+      edition.landing.letters = lettersBetween(rows, y, y2);
+    }
+    const at = heightToPlace(rows, y);
+    if (at === null) {
+      return;
+    }
+    edition.landing.at = Math.max(0, at - PLACE_SLACK);
+    if (y2 !== null && y2 > y) {
+      const to = heightToPlace(rows, y2, true);
+      edition.landing.to = to === null ? null : Math.min(1, to + PLACE_SLACK);
+    }
+  }
+
   // -- Bands -----------------------------------------------------------------
 
   function setBands(on) {
@@ -5672,12 +6801,25 @@
   // -- Landing: mark the passage, offer the way back --------------------------
 
   function markLanding(view) {
-    const { at, y } = edition.landing;
+    const { at, to: end, y, y2 } = edition.landing;
     let box;
     if (y !== null && window.VIEW_MODE !== "text") {
       // From search, in Page view: the lines at that height (owner,
-      // 2026-11-22), not the whole passage of the edition maps.
-      box = heightBox(view, y);
+      // 2026-11-22), not the whole passage of the edition maps. A shared
+      // passage: exactly its lines (owner, 2026-11-26).
+      box = y2 !== null && y2 > y ? spanBox(view, y, y2) : heightBox(view, y);
+    } else if (at === null) {
+      return false; // heights not yet turned into a place in the text
+    } else if (end !== null && end > at) {
+      // A shared passage in Text view: its words, from start to end (by
+      // character counts if they can't be found).
+      const place = textPlaces(view);
+      const found = findInTextView(view, edition.landing.letters);
+      box =
+        place &&
+        (found
+          ? stretchBox(place, found.at, found.to)
+          : stretchBox(place, at, end));
     } else {
       const place = textPlaces(view);
       const stretches = place ? editionStretches(view.id) || [] : [];
@@ -5799,34 +6941,49 @@
         }
       })
     );
+  }
 
-    if (edition.landing.at === null) {
+  /**
+   * A link that names a passage (?at= from search or Translate, ?y= / ?y=&y2=
+   * from search or a share): mark it once its page is drawn, and offer the way
+   * back to the other edition. Works without the Translate maps too.
+   */
+  function wireLanding(a) {
+    const bus = a.eventBus;
+    const landing = edition.landing;
+    if (landing.at === null && landing.y === null) {
       return;
     }
-    const landingPage = edition.landing.page || currentPage();
-    safely(showBackBar)(landingPage);
+    const landingPage = landing.page || currentPage();
+    if (landing.from) {
+      safely(showBackBar)(landingPage);
+    }
     // Mark the passage once the page is there (with its map if it can be
-    // had; without it, the place it starts).
-    lookUpStretches(landingPage)
-      .catch(() => null)
-      .then(() => {
-        let done = false;
-        const tryMark = safely(() => {
-          const view = !done && a.pdfViewer.getPageView(landingPage - 1);
-          if (view) {
-            done = markLanding(view);
-          }
-        });
-        tryMark();
-        const onDrawn = e => {
-          if (e.pageNumber === landingPage) {
-            // After pdf.js has scrolled to the page.
-            setTimeout(tryMark, 50);
-          }
-        };
-        bus._on("textlayerrendered", onDrawn);
-        bus._on("pagerendered", onDrawn);
+    // had; without it, the place it starts). A shared passage has only
+    // heights: Text view needs them as places in the page's text.
+    Promise.all([
+      lookUpStretches(landingPage).catch(() => null),
+      landing.at === null
+        ? landingTextPlace(landingPage).catch(() => null)
+        : null,
+    ]).then(() => {
+      let done = false;
+      const tryMark = safely(() => {
+        const view = !done && a.pdfViewer.getPageView(landingPage - 1);
+        if (view) {
+          done = markLanding(view);
+        }
       });
+      tryMark();
+      const onDrawn = e => {
+        if (e.pageNumber === landingPage) {
+          // After pdf.js has scrolled to the page.
+          setTimeout(tryMark, 50);
+        }
+      };
+      bus._on("textlayerrendered", onDrawn);
+      bus._on("pagerendered", onDrawn);
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -5922,6 +7079,7 @@
       wireWordHelper();
       wireSaveNudge();
       wireOtherEdition(a);
+      wireLanding(a);
       // Save shows whether this page is saved (pages change; the app sends
       // the saved list with the highlights).
       a.eventBus._on("pagechanging", refreshPressedStates);

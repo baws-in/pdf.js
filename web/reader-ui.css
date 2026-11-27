@@ -1027,6 +1027,12 @@ html.rui-chrome-hidden.rui-keep-bottom .rui-bottom {
   color: var(--rui-ink);
 }
 
+/* A word in the lower half of the screen: the card opens at the top, so it
+   never covers the word (the page isn't scrolled for it). */
+.rui-defcard.rui-defcard-top {
+  inset: calc(var(--rui-top-h) + 8px + env(safe-area-inset-top, 0px)) 10px auto;
+}
+
 .rui-defcard button,
 .rui-defcard a {
   font: inherit;
@@ -2484,4 +2490,90 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   opacity: 0.35;
   pointer-events: none;
   transition: opacity 0.12s ease;
+}
+
+/* Share sheet (reader-ui.js, "Share") */
+.rui-share {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rui-share-preview {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--rui-hover);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.rui-share-preview q {
+  font-family: Georgia, "Noto Serif", "Noto Serif Devanagari", serif;
+}
+
+.rui-share-where {
+  font-size: 13px;
+  color: var(--rui-muted);
+}
+
+.rui-share-credit {
+  padding: 0 4px;
+}
+
+.rui-share-tiles .rui-tile {
+  min-height: 72px;
+}
+
+.rui-share-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.rui-share-ask {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.rui-share-note,
+.rui-share-tip {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--rui-muted);
+}
+
+.rui-share-tip {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--rui-accent-soft);
+  color: var(--rui-accent-ink);
+}
+
+.rui-share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.rui-share-secondary {
+  height: 46px;
+  padding: 0 18px !important;
+  border-radius: 23px;
+  border: 1px solid var(--rui-line) !important;
+  font-weight: 500 !important;
 }

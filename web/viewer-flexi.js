@@ -466,10 +466,19 @@ function onBookClick() {
       check_one_word.indexOf(" ") <= -1 &&
       check_one_word.length >= 4
     ) {
-      let result = window.parent.dictionary(check_one_word);
-      console.log(result);
+      // Words worth a meaning are dotted, and a tap on one shows it: a
+      // selection is often the start of a longer one, so show the meaning
+      // only if it is still this one word a second later (owner,
+      // 2026-11-26). The reader closes it if the selection then grows.
       setTimeout(function () {
-        showDictionary(result, check_one_word);
+        const now = window
+          .getSelection()
+          .toString()
+          .replace(/^[^a-z\d]*|[^a-z\d]*$/gi, "");
+        if (now !== check_one_word) {
+          return;
+        }
+        showDictionary(window.parent.dictionary(check_one_word), check_one_word);
       }, 1000);
     }
   }
@@ -1356,7 +1365,9 @@ function showDictionary(result, searchText) {
   }
   // The new reader UI shows its own definition card (no Bootstrap).
   if (window.BAWS_READER_UI === 2 && window.BawsReaderUI) {
-    window.BawsReaderUI.showDefinition(searchText, result);
+    window.BawsReaderUI.showDefinition(searchText, result, {
+      fromSelection: true,
+    });
     return;
   }
   let panelBody = document.getElementById("dictionaryPanelBody");
