@@ -1452,10 +1452,14 @@
     const area = selectionBarArea();
     // Phones show their own copy/share menu above a selection, so put ours
     // below it on touch screens and above it with a mouse; above, on touch
-    // screens, means above the phone's menu too.
+    // screens, means above the phone's menu too. A selection at the very top
+    // of the screen leaves the phone no room above it, so its menu goes
+    // below the selection: ours then goes below that menu. Ours never
+    // covers it (owner, 2026-11-26).
     const touchFirst = matchMedia("(pointer: coarse)").matches;
     const menu = touchFirst ? SYSTEM_MENU_H : 0;
-    const below = last.bottom + gap;
+    const menuBelow = touchFirst && first.top < SYSTEM_MENU_H + margin;
+    const below = last.bottom + gap + (menuBelow ? SYSTEM_MENU_H : 0);
     const above = first.top - height - gap - menu;
     const fitsBelow = below + height <= area.bottom - margin;
     const fitsAbove = above >= area.top + margin;
