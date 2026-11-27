@@ -1304,8 +1304,25 @@
       return;
     }
     storageSet("ruiHighlightColor", color);
+    // The highlight's area and its saved text both take the full words.
+    wholeWordSelection();
     window.addBookMark?.(color);
     hideSelectionBar();
+  }
+
+  /**
+   * Widens the selection in the book to whole words at both ends: a phone
+   * selection often starts or ends inside one (owner, 2026-11-27). Used by
+   * Highlight, Copy and Save (Share takes whole words its own way).
+   */
+  function wholeWordSelection() {
+    const range = selectionRangeInBook();
+    if (!range) {
+      return;
+    }
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(snapToWords(range));
   }
 
   function buildSelectionBar() {
@@ -1735,6 +1752,7 @@
   }
 
   async function copySelection() {
+    wholeWordSelection();
     const text = selectedText();
     if (!text) {
       return;
@@ -2665,7 +2683,11 @@
 
   function selectedPassage() {
     restoreSelection();
-    return selectionRangeInBook() ? selectedText() : "";
+    if (!selectionRangeInBook()) {
+      return "";
+    }
+    wholeWordSelection(); // Save keeps the passage with its words whole
+    return selectedText();
   }
 
   /** Puts a saved entry back exactly as it was (for Undo). */
