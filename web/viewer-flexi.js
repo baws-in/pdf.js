@@ -1716,7 +1716,9 @@ document.addEventListener("DOMContentLoaded", event => {
   }
   isShareButtonHooked = true;
 });
-async function shareButtonClick(isLongPressShare) {
+// `band` (the new reader's long press on Share, with a passage selected):
+// {page, y, y2}, the passage's place, so the link opens there and marks it.
+async function shareButtonClick(isLongPressShare, band = null) {
   if (window.getSelection() && window) {
     console.log(PDFViewerApplication);
     console.log(window.location.origin);
@@ -1737,7 +1739,8 @@ async function shareButtonClick(isLongPressShare) {
         "/" +
         urlData.bookName +
         "/pdf/" +
-        urlData.pageNo;
+        (band ? band.page : urlData.pageNo) +
+        (band ? `?y=${band.y}&y2=${band.y2}` : "");
 
       selectedText = sel.toString().replace(/(\r\n|\n|\r)/gm, " ");
 

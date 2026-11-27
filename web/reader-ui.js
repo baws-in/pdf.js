@@ -1396,6 +1396,7 @@
       ui.bottom,
       document.querySelector(".rui-mini"),
       document.querySelector(".rui-defcard"),
+      document.querySelector(".rui-quote-note"),
     ];
     for (const node of foot) {
       const rect = showing(node);
@@ -4608,10 +4609,16 @@
   }
 
   /** One page as a print-ready image (a blob URL), or null. */
-  async function printPageImage(pageNumber, { withQr, withHighlights }) {
+  // Share: `qrUrl` (the shared link in the QR code), `marks` (the shared
+  // passage: {left, top, width, height} page fractions, highlighted as the
+  // selection is) and a smaller `scale`.
+  async function printPageImage(
+    pageNumber,
+    { withQr, withHighlights, qrUrl, marks = [], scale = PRINT_SCALE }
+  ) {
     const pdf = app().pdfDocument;
     const page = await pdf.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: PRINT_SCALE });
+    const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
@@ -4624,7 +4631,7 @@
       withQr && window.getQRCode
         ? Promise.race([
             window
-              .getQRCode(shortPageUrl(pageNumber), qrSize)
+              .getQRCode(qrUrl || shortPageUrl(pageNumber), qrSize)
               .getRawData("png"),
             new Promise(resolve => {
               setTimeout(resolve, 3000, null); // print without it
@@ -4633,6 +4640,20 @@
         : null;
     await page.render({ canvasContext: ctx, viewport, intent: "print" })
       .promise;
+
+    if (marks.length) {
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = "rgb(255, 240, 0)";
+      for (const mark of marks) {
+        ctx.fillRect(
+          mark.left * canvas.width,
+          mark.top * canvas.height,
+          mark.width * canvas.width,
+          mark.height * canvas.height
+        );
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
 
     if (withHighlights) {
       // "multiply" tints like a highlighter pen and keeps the text readable.
@@ -4793,6 +4814,7 @@
   // Android app (shareNative, openExternal).
 
   const SHARE_CARD = { width: 1080, height: 1350 };
+  const SHARE_PAGE_SCALE = 2; // the page image: sharp, and quick on a phone
   const SHARE_QUOTE_MAX = 600; // characters on the quote card
   const SHARE_TEXT_MAX = 1500; // characters of the passage in a message
   const SHARE_SHORT_MAX = 200; // X: the passage in a post
@@ -4961,7 +4983,21 @@
     }
     const selected = selectionRangeInBook();
     const range = selected && snapToWords(selected);
-    const text = range?.toString().replaceAll(/\s+/g, " ").trim();
+    // The selection's own text (it has the line breaks between the text
+    // layer's lines, which a range's text runs together), with the letters
+    // the whole words added at either end.
+    const added = (node, from, to) => {
+      return node.nodeType === Node.TEXT_NODE ? node.data.slice(from, to) : "";
+    };
+    const text =
+      range &&
+      (
+        added(range.startContainer, range.startOffset, selected.startOffset) +
+        window.getSelection().toString() +
+        added(range.endContainer, selected.endOffset, range.endOffset)
+      )
+        .replaceAll(/\s+/g, " ")
+        .trim();
     if (!text) {
       return null;
     }
@@ -4974,7 +5010,14 @@
     if (!page) {
       return null;
     }
-    const result = { page, text, y: null, y2: null };
+    const result = {
+      page,
+      pages: [page],
+      text,
+      y: null,
+      y2: null,
+      marks: {}, // page -> the passage's rectangles (page fractions)
+    };
     if (window.VIEW_MODE === "text") {
       const textView = pageDiv.querySelector(".textView");
       const from =
@@ -4996,6 +5039,21 @@
             true
           );
         }
+        // The page image's mark: the PDF's own text between those heights
+        // (Text view's text isn't laid out like the page).
+        if (result.y !== null && rows?.items) {
+          result.marks[page] = rows.items
+            .filter(item => {
+              const middle = (item.top + item.bottom) / 2;
+              return middle >= result.y && middle <= result.y2;
+            })
+            .map(item => ({
+              left: item.left,
+              top: item.top,
+              width: item.width,
+              height: item.bottom - item.top,
+            }));
+        }
       }
     } else {
       const box = pageDiv.getBoundingClientRect();
@@ -5016,6 +5074,12 @@
         result.y2 = clamp01(
           (Math.max(...rects.map(r => r.bottom)) - box.top) / box.height
         );
+        result.marks[page] = rects.map(r => ({
+          left: (r.left - box.left) / box.width,
+          top: (r.top - box.top) / box.height,
+          width: r.width / box.width,
+          height: r.height / box.height,
+        }));
       }
     }
     return result;
@@ -5111,6 +5175,295 @@
       subject: where || "Dr. B.R. Ambedkar's Writings and Speeches",
       text: `${body}\n\nRead it on BAWS: ${link}`,
     };
+  }
+
+  // -- A passage over a page break --------------------------------------------
+  //
+  // A quote often starts or ends on another page, and selecting across the
+  // page gap is hard on a phone. The sheet offers (owner, 2026-11-26):
+  //  - "Start of the sentence" / "Finish the sentence": the rest of the
+  //    sentence, from the page's own text (from the previous or next page
+  //    when it runs over), in one tap;
+  //  - "Continue on the next page": keeps the passage, moves to the next
+  //    page, and the selection made there is added to it (any length).
+  // Over two pages, the quote card and the message get all of it, the page
+  // image is the page the reader picks, and the link opens where the
+  // selection was.
+
+  const SENTENCE_MAX = 600; // characters a sentence may add
+  const SENTENCE_END = /[.?!।]+["”’)\]]*(?=\s|$)/gu;
+  // Words a full stop follows without ending the sentence.
+  const NOT_AN_END = new Set(
+    (
+      "dr mr mrs ms prof rev hon st sir no nos vol vols pp p ch chap ed eds " +
+      "viz cf etc vs art sec cl fig jr sr govt ltd co i.e e.g ibid op cit"
+    ).split(" ")
+  );
+  const pageTextCache = new Map(); // page number -> Promise<string>
+
+  /**
+   * A page's running text, from the PDF: without the running head (a first
+   * line at the top, set apart by a wider gap) or footnotes (smaller type),
+   * with words hyphenated at line ends joined; "" for none.
+   */
+  function runningText(pageNumber) {
+    if (!(pageNumber >= 1 && pageNumber <= pagesCount())) {
+      return Promise.resolve("");
+    }
+    if (!pageTextCache.has(pageNumber)) {
+      pageTextCache.set(
+        pageNumber,
+        (async () => {
+          const page = await app().pdfDocument.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 1 });
+          const { items } = await page.getTextContent();
+          const list = items.map(item => {
+            const [, base] = viewport.convertToViewportPoint(
+              item.transform[4],
+              item.transform[5]
+            );
+            const height =
+              Math.abs(item.height || item.transform[3]) / viewport.height;
+            return {
+              str: item.str,
+              eol: item.hasEOL,
+              top: base / viewport.height - height,
+              height,
+            };
+          });
+          const words = list.filter(item => item.str.trim());
+          if (!words.length) {
+            return "";
+          }
+          // The body's type size: the one most characters are set in.
+          const sizes = new Map();
+          for (const { height, str } of words) {
+            const key = Math.round(height * 2000);
+            sizes.set(key, (sizes.get(key) || 0) + str.length);
+          }
+          const body = [...sizes].sort((a, b) => b[1] - a[1])[0][0] / 2000;
+          const lines = [
+            ...new Set(words.map(w => Math.round(w.top * 500) / 500)),
+          ].sort((a, b) => a - b);
+          let headFoot = -1;
+          if (lines.length > 3) {
+            const gaps = lines
+              .slice(1)
+              .map((top, i) => top - lines[i])
+              .sort((a, b) => a - b);
+            const usual = gaps[Math.floor(gaps.length / 2)];
+            if (lines[0] < 0.12 && lines[1] - lines[0] > usual * 1.25) {
+              headFoot = lines[0] + usual * 0.5;
+            }
+          }
+          let text = "";
+          for (const item of list) {
+            const blank = !item.str.trim();
+            if (blank || (item.height >= body * 0.85 && item.top > headFoot)) {
+              text += item.str;
+              // A line ending in a dash runs on without a space.
+              if (item.eol && !/[–—]$/.test(item.str)) {
+                text += " ";
+              }
+            }
+          }
+          return text
+            .replaceAll(/(\p{L})[-­‐]\s+(\p{Ll})/gu, "$1$2")
+            .replaceAll(/\s+/g, " ")
+            .trim();
+        })().catch(() => "")
+      );
+    }
+    return pageTextCache.get(pageNumber);
+  }
+
+  /** Where a passage is in a page's text: {start, end} offsets, or null. */
+  function locateIn(text, passageText) {
+    let hay = "";
+    const at = [];
+    for (let i = 0; i < text.length; i++) {
+      if (LETTER.test(text[i])) {
+        hay += text[i].toLowerCase();
+        at.push(i);
+      }
+    }
+    const found = findLetters(hay, lettersOnly(passageText));
+    return found ? { start: at[found.first], end: at[found.last] + 1 } : null;
+  }
+
+  /** Is this full stop (etc.) at `index` the end of a sentence? */
+  function endsHere(text, index, mark) {
+    if (!mark.startsWith(".")) {
+      return true;
+    }
+    const word = /([\p{L}.]+)$/u.exec(text.slice(0, index))?.[1] || "";
+    const bare = word.toLowerCase().replace(/\.$/, "");
+    // Initials ("B. R."), abbreviations ("Dr.", "viz.").
+    return !(word.length === 1 || NOT_AN_END.has(bare));
+  }
+
+  /** Just after the end of the sentence running at `from`; -1: none. */
+  function sentenceEndAfter(text, from) {
+    const re = new RegExp(SENTENCE_END.source, "gu");
+    re.lastIndex = from;
+    for (let match; (match = re.exec(text)); ) {
+      if (endsHere(text, match.index, match[0])) {
+        return match.index + match[0].length;
+      }
+    }
+    return -1;
+  }
+
+  /** Where the sentence running at `upto` starts; -1: before this text. */
+  function sentenceStartBefore(text, upto) {
+    const re = new RegExp(SENTENCE_END.source, "gu");
+    let start = -1;
+    for (let match; (match = re.exec(text)) && match.index < upto; ) {
+      const after = match.index + match[0].length;
+      if (after <= upto && endsHere(text, match.index, match[0])) {
+        start = after;
+      }
+    }
+    if (start < 0) {
+      return -1;
+    }
+    while (start < upto && /\s/.test(text[start])) {
+      start++;
+    }
+    return start;
+  }
+
+  const finishesSentence = text => {
+    const trimmed = text.trim();
+    const match = /[.?!।]+["”’)\]]*$/u.exec(trimmed);
+    return !!match && endsHere(trimmed, match.index, match[0]);
+  };
+
+  /**
+   * What the sheet can add to a passage to make whole sentences:
+   * {core, head?: {text, page?}, tail?: {text, page?}} (page: from the
+   * previous or next page), or {} when the passage can't be found.
+   */
+  async function sentenceOffers(passage) {
+    const text = await runningText(passage.page);
+    const at = text && locateIn(text, passage.text);
+    if (!at) {
+      return {};
+    }
+    const offers = { core: text.slice(at.start, at.end) };
+    if (!finishesSentence(passage.text)) {
+      const end = sentenceEndAfter(text, at.end);
+      if (end >= 0) {
+        offers.tail = { text: text.slice(at.end, end) };
+      } else {
+        const next = await runningText(passage.page + 1);
+        const nextEnd = next ? sentenceEndAfter(next, 0) : -1;
+        if (nextEnd >= 0) {
+          offers.tail = {
+            text: `${text.slice(at.end)} ${next.slice(0, nextEnd)}`,
+            page: passage.page + 1,
+          };
+        }
+      }
+    }
+    const start = sentenceStartBefore(text, at.start);
+    if (start >= 0) {
+      offers.head = { text: text.slice(start, at.start) };
+    } else {
+      const previous = await runningText(passage.page - 1);
+      if (!previous || finishesSentence(previous)) {
+        offers.head = { text: text.slice(0, at.start) };
+      } else {
+        const from = sentenceStartBefore(previous, previous.length);
+        if (from >= 0) {
+          offers.head = {
+            text: `${previous.slice(from)} ${text.slice(0, at.start)}`,
+            page: passage.page - 1,
+          };
+        }
+      }
+    }
+    for (const side of ["head", "tail"]) {
+      const added = offers[side]?.text.trim();
+      if (!added || !LETTER.test(added) || added.length > SENTENCE_MAX) {
+        delete offers[side];
+      }
+    }
+    return offers;
+  }
+
+  /**
+   * The passage as it will be shared: the selection, with the sentence's
+   * start and end if asked for, and the pages it is on.
+   */
+  function sharedPassage(state) {
+    const base = state.passage;
+    if (!base) {
+      return null;
+    }
+    const { offers = {} } = state;
+    const head = state.head && offers.head;
+    const tail = state.tail && offers.tail;
+    if (!head && !tail) {
+      return base;
+    }
+    const text = `${head ? head.text : ""}${offers.core}${
+      tail ? tail.text : ""
+    }`
+      .replaceAll(/\s+/g, " ")
+      .trim();
+    const pages = new Set(base.pages || [base.page]);
+    for (const part of [head, tail]) {
+      if (part?.page) {
+        pages.add(part.page);
+      }
+    }
+    return { ...base, text, pages: [...pages].sort((a, b) => a - b) };
+  }
+
+  // A passage kept while the reader selects where it ends on the next page
+  // ("Continue on the next page"): {passage, dismiss}.
+  let continuedQuote = null;
+
+  /**
+   * The note while a quote waits for its end: a small bar at the foot (the
+   * next part is usually selected at the top of the page, owner 2026-11-26).
+   * Hide clears the note and keeps the quote; Discard drops the quote.
+   */
+  function showContinuedNote() {
+    const note = el("div", "rui-quote-note", { role: "status" });
+    const text = el("span");
+    text.textContent = "Quote continues: select where it ends, then tap Share.";
+    const hide = el("button", "", { type: "button" });
+    hide.textContent = "Hide";
+    const discard = el("button", "", { type: "button" });
+    discard.textContent = "Discard";
+    note.append(text, hide, discard);
+    const remove = () => note.remove();
+    hide.addEventListener("click", remove);
+    discard.addEventListener("click", () => {
+      continuedQuote = null;
+      remove();
+      toast("Quote discarded.");
+    });
+    // Keep the selection while pressing the note's buttons (mouse).
+    note.addEventListener("mousedown", event => event.preventDefault());
+    const host = document.getElementById("outerContainer") || document.body;
+    host.append(note);
+    return remove;
+  }
+
+  function continueOnNextPage(passage) {
+    const last = Math.max(...(passage.pages || [passage.page]));
+    if (last >= pagesCount()) {
+      return;
+    }
+    closeSheet();
+    window.getSelection()?.removeAllRanges();
+    hideSelectionBar();
+    app().page = last + 1;
+    continuedQuote?.dismiss?.();
+    continuedQuote = { passage, dismiss: showContinuedNote() };
   }
 
   // -- Images -----------------------------------------------------------------
@@ -5256,22 +5609,20 @@
     ]).catch(() => null);
   }
 
-  /** The page as an image (its highlights, the selection, a QR code). */
+  /**
+   * The page as an image: drawn from the PDF (the chosen page, when the
+   * passage is on two), with the reader's highlights, the shared passage
+   * marked as it was selected (remembered when it was captured, so a page
+   * left for the next one keeps its mark) and a QR code to the link.
+   */
   async function pageImage(state, qrLink) {
-    const page = state.passage?.page || currentPage();
-    if (
-      window.VIEW_MODE !== "text" &&
-      page === currentPage() &&
-      window.makeSharePageImage
-    ) {
-      const blob = await window.makeSharePageImage(qrLink);
-      if (blob) {
-        return blob;
-      }
-    }
+    const page = state.imagePage || state.passage?.page || currentPage();
     const url = await printPageImage(page, {
       withQr: true,
       withHighlights: true,
+      qrUrl: qrLink,
+      marks: state.passage?.marks?.[page] || [],
+      scale: SHARE_PAGE_SCALE,
     });
     if (!url) {
       return null;
@@ -5400,7 +5751,9 @@
       await sendShare({ ...state, kind: "none" }, platform);
       return;
     }
-    const name = `baws-${state.kind}-${page}.png`;
+    const imagePage = state.kind === "page" ? state.imagePage || page : page;
+    const extension = blob.type === "image/jpeg" ? "jpg" : "png";
+    const name = `baws-${state.kind}-${imagePage}.${extension}`;
     const pick =
       platform.href && platform.id !== "more"
         ? ` Choose ${platform.label} in the share window.`
@@ -5458,7 +5811,30 @@
    * send ("page" from More → Page image).
    */
   async function openShareSheet({ kind } = {}) {
-    const passage = await captureSelection();
+    let passage = await captureSelection();
+    // The end of a passage begun on the previous page ("Continue on the
+    // next page"): added to it. Its own end can still finish its sentence.
+    let endOffers = null;
+    if (continuedQuote) {
+      const first = continuedQuote.passage;
+      continuedQuote.dismiss?.();
+      continuedQuote = null;
+      if (passage) {
+        const second = await sentenceOffers(passage).catch(() => ({}));
+        endOffers = second.core
+          ? { core: `${first.text} ${second.core}`, tail: second.tail }
+          : {};
+        passage = {
+          ...first,
+          text: `${first.text} ${passage.text}`,
+          pages: [...new Set([...first.pages, passage.page])],
+          marks: { ...first.marks, ...passage.marks },
+          continued: true,
+        };
+      } else {
+        passage = first;
+      }
+    }
     if (!passage && !kind) {
       openSheet("Share", body => {
         body.classList.add("rui-share");
@@ -5485,10 +5861,17 @@
       });
       return;
     }
-    showShareOptions(passage, kind);
+    // Whole sentences, when the selection cuts one. A passage put together
+    // over pages: only its end (its start is the first part, the reader's
+    // own choice).
+    let offers = endOffers || {};
+    if (passage && !passage.continued) {
+      offers = await sentenceOffers(passage).catch(() => ({}));
+    }
+    showShareOptions(passage, kind, offers);
   }
 
-  function showShareOptions(passage, preset) {
+  function showShareOptions(passage, preset, offers = {}) {
     const stored = storageGet("ruiShareImage");
     // In this order (owner, 2026-11-26); a quote card needs a passage.
     const kinds = passage
@@ -5498,20 +5881,108 @@
     if (preset && kinds.includes(preset)) {
       kind = preset;
     }
-    const state = { passage, credit: shareCreditOn(), kind };
+    const state = {
+      passage,
+      credit: shareCreditOn(),
+      kind,
+      offers,
+      head: false,
+      tail: false,
+      imagePage: null,
+    };
     const page = passage?.page || currentPage();
     openSheet("Share", body => {
       body.classList.add("rui-share");
 
       const preview = el("p", "rui-share-preview");
-      if (passage) {
-        const quote = el("q");
-        quote.textContent = cut(passage.text, 220);
-        preview.append(quote);
-      }
+      const quote = el("q");
       const where = el("span", "rui-share-where");
       where.textContent = shareSource(page);
+      if (passage) {
+        preview.append(quote);
+      }
       preview.append(where);
+
+      // Whole sentences, and more of the passage on the next page.
+      const more = el("div", "rui-share-more");
+      const toggles = [];
+      const OFFER_LABELS = {
+        head: ["Start of the sentence", "(previous page)"],
+        tail: ["Finish the sentence", "(next page)"],
+      };
+      for (const side of ["head", "tail"]) {
+        if (!offers[side]) {
+          continue;
+        }
+        const [label, other] = OFFER_LABELS[side];
+        const chip = el("button", "rui-chip", {
+          type: "button",
+          "aria-pressed": "false",
+        });
+        chip.textContent = offers[side].page ? `${label} ${other}` : label;
+        chip.addEventListener("click", () => {
+          state[side] = !state[side];
+          chip.setAttribute("aria-pressed", String(state[side]));
+          refresh();
+        });
+        toggles.push(chip);
+      }
+      // Not again for a passage already continued from the page before.
+      if (
+        passage &&
+        !passage.continued &&
+        Math.max(...(passage.pages || [page])) < pagesCount()
+      ) {
+        const next = el("button", "rui-chip", { type: "button" });
+        next.textContent = "Continue on the next page";
+        // The sentence's end taken from the next page is left out: the
+        // reader selects there what to add (it would come twice).
+        next.addEventListener("click", () =>
+          continueOnNextPage(
+            sharedPassage({
+              ...state,
+              tail: state.tail && !offers.tail?.page,
+            })
+          )
+        );
+        toggles.push(next);
+      }
+      more.append(...toggles);
+
+      // Over two pages, the page image is one of them.
+      const pagePick = el("div", "rui-share-pagepick", {
+        role: "group",
+        "aria-label": "Page image from",
+      });
+      const refresh = () => {
+        const shared = sharedPassage(state);
+        if (shared) {
+          quote.textContent = cut(shared.text, 260);
+        }
+        const pages = shared?.pages || [page];
+        if (!pages.includes(state.imagePage)) {
+          state.imagePage = pages[0];
+        }
+        pagePick.hidden = pages.length < 2 || state.kind !== "page";
+        pagePick.replaceChildren();
+        if (pages.length > 1) {
+          const label = el("span");
+          label.textContent = "Page image:";
+          pagePick.append(label);
+          pages.forEach((number, i) => {
+            const button = el("button", "rui-chip", {
+              type: "button",
+              "aria-pressed": String(number === state.imagePage),
+            });
+            button.textContent = i === 0 ? "Where it starts" : "Where it ends";
+            button.addEventListener("click", () => {
+              state.imagePage = number;
+              refresh();
+            });
+            pagePick.append(button);
+          });
+        }
+      };
 
       const imageTitle = sectionTitle("Include an image");
       const picker = el("div", "rui-segmented rui-share-kinds", {
@@ -5543,10 +6014,12 @@
         button.addEventListener("click", () => {
           state.kind = option;
           showKind();
+          refresh();
         });
         picker.append(button);
       }
       showKind();
+      refresh();
 
       const who = shareIdentity();
       let credit;
@@ -5586,7 +6059,10 @@
         tile.addEventListener("click", () => {
           closeSheet();
           hideSelectionBar();
-          sendShare({ ...state }, platform).catch(error => {
+          sendShare(
+            { ...state, passage: sharedPassage(state) },
+            platform
+          ).catch(error => {
             console.warn("Share:", error);
             toast("Couldn't share. Please try again.");
           });
@@ -5599,7 +6075,11 @@
       tipLabel.textContent = "Tip: ";
       tip.append(tipLabel, document.createTextNode(nextShareTip()));
 
-      body.append(preview, imageTitle, picker, credit, toTitle, tiles, tip);
+      body.append(preview);
+      if (toggles.length) {
+        body.append(more);
+      }
+      body.append(imageTitle, picker, pagePick, credit, toTitle, tiles, tip);
     });
   }
 
@@ -5668,7 +6148,23 @@
       priority: 20,
       elementId: "shareButton",
       run: () => openShareSheet(),
-      longPress: () => window.shareButtonClick?.(true),
+      // As before (a QR code to download, the link copied), with the
+      // selected passage's place in the link (owner, 2026-11-27).
+      longPress: () => {
+        captureSelection()
+          .catch(() => null)
+          .then(passage => {
+            const band =
+              passage && passage.y !== null && passage.y2 > passage.y
+                ? {
+                    page: passage.page,
+                    y: round3(passage.y),
+                    y2: round3(passage.y2),
+                  }
+                : null;
+            window.shareButtonClick?.(true, band);
+          });
+      },
     });
     // Selection bar (after the colour swatches)
     registerAction({
@@ -6348,7 +6844,7 @@
             if (!item.str?.trim()) {
               continue;
             }
-            const [, base] = viewport.convertToViewportPoint(
+            const [x, base] = viewport.convertToViewportPoint(
               item.transform[4],
               item.transform[5]
             );
@@ -6358,6 +6854,8 @@
             pieces.push({
               top: (base - height) / viewport.height,
               bottom: base / viewport.height,
+              left: x / viewport.width,
+              width: (item.width || 0) / viewport.width,
               chars: item.str.length,
               str: item.str,
             });

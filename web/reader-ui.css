@@ -2530,6 +2530,76 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   line-height: 1.1;
 }
 
+.rui-share-more,
+.rui-share-pagepick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rui-share-pagepick[hidden] {
+  display: none;
+}
+
+.rui-share-pagepick > span {
+  font-size: 13px;
+  color: var(--rui-muted);
+}
+
+.rui-share .rui-chip[aria-pressed="true"] {
+  background: var(--rui-accent-soft) !important;
+  border-color: var(--rui-accent) !important;
+  color: var(--rui-accent-ink) !important;
+}
+
+/* "Continue on the next page": a quote waiting for its end. At the foot,
+   above the bottom bar, so the top of the page is free to select. */
+.rui-quote-note {
+  position: fixed;
+  inset: auto 12px
+    calc(var(--rui-bottom-h) + 10px + env(safe-area-inset-bottom, 0px));
+  z-index: 1060;
+  max-width: 520px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 16px;
+  background: var(--rui-toast-bg);
+  color: var(--rui-toast-fg);
+  box-shadow: var(--rui-shadow);
+  font-family: var(--rui-font);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-quote-note {
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.rui-quote-note > span {
+  flex: 1;
+}
+
+.rui-quote-note button {
+  flex: none;
+  height: 36px;
+  padding: 0 12px !important;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.35) !important;
+  background: rgb(255 255 255 / 0.12) !important;
+  color: var(--rui-toast-fg) !important;
+  font-weight: 600 !important;
+}
+
+.rui-quote-note button:last-child {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: #fda4af !important;
+}
+
 .rui-share-credit {
   padding: 0 4px;
 }
