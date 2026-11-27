@@ -2521,6 +2521,15 @@ html.rui-chrome-hidden:not(.rui-keep-bottom) .rui-mini {
   color: var(--rui-muted);
 }
 
+/* Up to four choices on a phone: the icon above its label. */
+.rui-share-kinds button {
+  height: 58px;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 1.1;
+}
+
 .rui-share-credit {
   padding: 0 4px;
 }

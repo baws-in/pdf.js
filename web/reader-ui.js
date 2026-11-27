@@ -4917,16 +4917,51 @@
     return clamp01((at ?? total) / total);
   }
 
+  // Letters of a word (and the apostrophes and hyphens inside one).
+  const WORD_CHAR = /[\p{L}\p{M}\p{N}'’-]/u;
+
+  /**
+   * The range widened to whole words: on a phone a selection often starts or
+   * ends inside a word ("ople are" for "people are"). Only a boundary that
+   * cuts a word moves (owner, 2026-11-26).
+   */
+  function snapToWords(selected) {
+    const range = selected.cloneRange();
+    const start = range.startContainer;
+    if (start.nodeType === Node.TEXT_NODE) {
+      let i = range.startOffset;
+      if (WORD_CHAR.test(start.data[i] || "")) {
+        while (i > 0 && WORD_CHAR.test(start.data[i - 1])) {
+          i--;
+        }
+        range.setStart(start, i);
+      }
+    }
+    const end = range.endContainer;
+    if (end.nodeType === Node.TEXT_NODE) {
+      let j = range.endOffset;
+      if (j > 0 && WORD_CHAR.test(end.data[j - 1])) {
+        while (j < end.data.length && WORD_CHAR.test(end.data[j])) {
+          j++;
+        }
+        range.setEnd(end, j);
+      }
+    }
+    return range;
+  }
+
   /**
    * The selection to share: {page, text, y, y2} (heights on the PDF page,
    * whichever view it was made in; null if they can't be had), or null.
+   * Words cut by the selection's ends are taken whole.
    */
   async function captureSelection() {
     if (!restoreSelection()) {
       return null;
     }
-    const range = selectionRangeInBook();
-    const text = range && selectedText();
+    const selected = selectionRangeInBook();
+    const range = selected && snapToWords(selected);
+    const text = range?.toString().replaceAll(/\s+/g, " ").trim();
     if (!text) {
       return null;
     }
@@ -5202,6 +5237,25 @@
     });
   }
 
+  /**
+   * The QR code to the passage (or page): the same image as the long press
+   * on Share (viewer-flexi.js: getQRCode, 600 px, the BAWS logo), with the
+   * shared link (credit, utm_source=qr_code).
+   */
+  async function qrImage(state, qrLink) {
+    if (!window.getQRCode) {
+      return null;
+    }
+    return Promise.race([
+      window
+        .getQRCode(qrLink, 600, "https://baws.in/baws_social_logo.png", 50)
+        .getRawData("png"),
+      new Promise(resolve => {
+        setTimeout(resolve, 5000, null);
+      }),
+    ]).catch(() => null);
+  }
+
   /** The page as an image (its highlights, the selection, a QR code). */
   async function pageImage(state, qrLink) {
     const page = state.passage?.page || currentPage();
@@ -5330,10 +5384,12 @@
     let blob;
     try {
       const qrLink = shareLink(page, state.passage, "qr_code", state.credit);
-      blob =
-        state.kind === "quote"
-          ? await quoteCardImage(state, qrLink)
-          : await pageImage(state, qrLink);
+      const makers = {
+        page: pageImage,
+        qr: qrImage,
+        quote: quoteCardImage,
+      };
+      blob = await makers[state.kind](state, qrLink);
     } catch (error) {
       console.warn("Share image:", error);
     } finally {
@@ -5344,9 +5400,7 @@
       await sendShare({ ...state, kind: "none" }, platform);
       return;
     }
-    const name = `baws-${
-      state.kind === "quote" ? "quote" : "page"
-    }-${page}.png`;
+    const name = `baws-${state.kind}-${page}.png`;
     const pick =
       platform.href && platform.id !== "more"
         ? ` Choose ${platform.label} in the share window.`
@@ -5436,7 +5490,10 @@
 
   function showShareOptions(passage, preset) {
     const stored = storageGet("ruiShareImage");
-    const kinds = passage ? ["quote", "page", "none"] : ["page", "none"];
+    // In this order (owner, 2026-11-26); a quote card needs a passage.
+    const kinds = passage
+      ? ["page", "qr", "quote", "none"]
+      : ["page", "qr", "none"];
     let kind = kinds.includes(stored) ? stored : kinds[0];
     if (preset && kinds.includes(preset)) {
       kind = preset;
@@ -5463,8 +5520,9 @@
       });
       picker.style.gridTemplateColumns = `repeat(${kinds.length}, minmax(0, 1fr))`;
       const KIND_LABELS = {
-        quote: ["Quote card", "quote"],
         page: ["Page", "image"],
+        qr: ["QR code", "qr"],
+        quote: ["Quote card", "quote"],
         none: ["No image", "link"],
       };
       const showKind = () => {
@@ -5793,7 +5851,7 @@
       placements: ["more"],
       group: "Share",
       priority: 40,
-      run: () => window.shareButtonClick?.(true),
+      run: () => openShareSheet({ kind: "qr" }),
     });
     registerAction({
       id: "copyLink",
