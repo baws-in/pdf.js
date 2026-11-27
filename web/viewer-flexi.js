@@ -1558,7 +1558,7 @@ async function shareBookPageContent(
       getQRCode(
         pageUrl,
         600,
-        "https://baws.in/baws_social_logo.png",
+        "images/baws_social_logo.png",
         50
       ).download({ name: uuidv4(), extension: "png" });
       return;
@@ -2315,32 +2315,32 @@ function setupMediaSession() {
       artwork: [
         // Add a placeholder image for the media notification
         {
-          src: "https://baws.in/baws_social_logo.png",
+          src: "images/baws_social_logo.png",
           sizes: "96x96",
           type: "image/png",
         },
         {
-          src: "https://baws.in/baws_social_logo.png",
+          src: "images/baws_social_logo.png",
           sizes: "128x128",
           type: "image/png",
         },
         {
-          src: "https://baws.in/baws_social_logo.png",
+          src: "images/baws_social_logo.png",
           sizes: "192x192",
           type: "image/png",
         },
         {
-          src: "https://baws.in/baws_social_logo.png",
+          src: "images/baws_social_logo.png",
           sizes: "256x256",
           type: "image/png",
         },
         {
-          src: "https://baws.in/baws_social_logo.png",
+          src: "images/baws_social_logo.png",
           sizes: "384x384",
           type: "image/png",
         },
         {
-          src: "https://baws.in/baws_social_logo.png",
+          src: "images/baws_social_logo.png",
           sizes: "512x512",
           type: "image/png",
         },

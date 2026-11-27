@@ -13,6 +13,51 @@
  * swipes (touch only) turn pages when nothing is selected and the page is not
  * scrolled sideways.
  */
+
+/*
+ * Booth demo, offline (owner, 2026-11-27): while the app runs its booth demo
+ * (window.BAWS_DEMO in the app), the reader's requests (the book's PDF, its
+ * Text view pages, the Translate maps) are answered first from the pack the
+ * app saved in Cache Storage ("baws-booth"; baws-search src/demo/pack.js).
+ * Installed before pdf.js opens the book (this script runs before the
+ * deferred viewer module). Off the demo, nothing changes.
+ */
+(function () {
+  "use strict";
+  let demo = false;
+  try {
+    demo = window.parent !== window && !!window.parent.BAWS_DEMO;
+  } catch {
+    demo = false;
+  }
+  if (!demo || !window.caches) {
+    return;
+  }
+  // The pack's key for a URL: query parameters in a fixed order.
+  const keyOf = url => {
+    const u = new URL(url, location.href);
+    u.hash = "";
+    u.searchParams.sort();
+    return u.href;
+  };
+  const realFetch = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input?.url;
+    if (url && !/^(blob|data):/.test(url)) {
+      try {
+        const cache = await caches.open("baws-booth");
+        const hit = await cache.match(keyOf(url));
+        if (hit) {
+          return hit;
+        }
+      } catch {
+        // no pack: the network, as usual
+      }
+    }
+    return realFetch(input, init);
+  };
+})();
+
 (function () {
   "use strict";
 
@@ -5623,7 +5668,7 @@
     }
     return Promise.race([
       window
-        .getQRCode(qrLink, 600, "https://baws.in/baws_social_logo.png", 50)
+        .getQRCode(qrLink, 600, "images/baws_social_logo.png", 50)
         .getRawData("png"),
       new Promise(resolve => {
         setTimeout(resolve, 5000, null);
@@ -7739,6 +7784,28 @@
     closeSheet,
     showControls: () => setChromeHidden(false),
     hideControls: () => setChromeHidden(true),
+    // The booth demo (baws-search src/demo/tour.js) taps a dotted word.
+    demo: {
+      /** Shows the first dotted word on screen's meaning; its word, or null. */
+      defineDottedWord() {
+        const box = document
+          .getElementById("viewerContainer")
+          .getBoundingClientRect();
+        const dot = [...document.querySelectorAll(".rui-word-dot")].find(d => {
+          const r = d.getBoundingClientRect();
+          return (
+            r.width > 0 && r.top > box.top + 60 && r.bottom < box.bottom - 120
+          );
+        });
+        if (!dot) {
+          return null;
+        }
+        const r = dot.getBoundingClientRect();
+        return defineWordAt(r.left + r.width / 2, r.top + r.height / 2)
+          ? dot.dataset.w
+          : null;
+      },
+    },
   };
 
   if (document.readyState === "loading") {

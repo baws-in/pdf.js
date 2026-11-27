@@ -997,6 +997,10 @@ function buildGeneric(defines, dir) {
       gulp
       .src(["web/viewer-flexi.js", "web/reader-ui.js", "web/reader-ui.css"])
       .pipe(gulp.dest(dir + "web")),
+    // Libraries the reader used to load from CDNs (bundled: it works offline).
+    gulp
+      .src("web/vendor/*", { encoding: false })
+      .pipe(gulp.dest(dir + "web/vendor")),
   ]);
 }
 
@@ -1186,6 +1190,10 @@ function buildMinified(defines, dir) {
       gulp
       .src(["web/viewer-flexi.js", "web/reader-ui.js", "web/reader-ui.css"])
       .pipe(gulp.dest(dir + "web")),
+    // Libraries the reader used to load from CDNs (bundled: it works offline).
+    gulp
+      .src("web/vendor/*", { encoding: false })
+      .pipe(gulp.dest(dir + "web/vendor")),
   ]);
 }
 
